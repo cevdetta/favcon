@@ -1,0 +1,28 @@
+name: Bug report
+description: Something built wrong, or did not build at all.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, and what came out.
+      placeholder: |
+        $ npx favcon logo.svg --out public
+        ...
+    validations: { required: true }
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: "Please paste the output of: `favcon -V && node -v && resvg --version && pngquant --version && oxipng --version`"
+      render: shell
+    validations: { required: true }
+  - type: textarea
+    id: svg
+    attributes:
+      label: The SVG
+      description: >
+        The smallest input that still shows the problem. Output bytes depend on the exact
+        mark, so a reproduction without one is usually a guess.
+      render: xml

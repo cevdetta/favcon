@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="Favcon general-case fixture" data-origin="fixtures">
+  <title>General case</title>
+  <desc>Two paths, a two-entry palette, arcs, relative commands and h/v shorthand.</desc>
+  <style>
+    .ground { fill: var(--ground, #1F3A5F); }
+    .accent { fill: var(--accent, #E8B84B); }
+  </style>
+  <g id="never-referenced" class="ground">
+    <path d="M32 3 l25 9 v19 a25 25 0 0 1 -25 30 a25 25 0 0 1 -25 -30 V12 Z"/>
+  </g>
+  <path class="accent" d="M19 30 h7 l5 10 9 -19 h7 l-14 29 h-3 z"/>
+</svg>

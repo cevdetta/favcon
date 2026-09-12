@@ -1,0 +1,240 @@
+# favcon
+
+One SVG in, an optimised favicon set out.
+
+```sh
+npx favcon logo.svg --out public
+```
+
+That is the whole quickstart. It writes six files, prints their sizes, and tells you if your
+mark is animated.
+
+```
+logo.svg                  289 B  static (no animation in the source)
+icon.svg                  289 B
+favicon.ico               336 B
+apple-touch-icon.png     1016 B
+icon-192.png             1123 B
+icon-512.png             3086 B
+```
+
+(That is `test/fixtures/general.svg`, a two-colour mark, at the defaults. Your bytes depend on
+your mark — `node bench/bench.mjs` measures the whole corpus.)
+
+Add the links to your `<head>` — `favcon --html` prints them:
+
+```html
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+```
+
+## Install
+
+favcon is a small orchestrator around three binaries it does not bundle. You need all three.
+
+| | macOS | Debian/Ubuntu | Arch | Anywhere |
+|---|---|---|---|---|
+| **resvg** | `brew install resvg` | tarball from [releases](https://github.com/linebender/resvg/releases) | `pacman -S resvg` | `cargo install resvg` |
+| **oxipng** | `brew install oxipng` | `.deb` from [releases](https://github.com/oxipng/oxipng/releases) | `pacman -S oxipng` | `cargo install oxipng` |
+| **pngquant** | `brew install pngquant` | `apt install pngquant` | `pacman -S pngquant` | [pngquant.org](https://pngquant.org) |
+
+pngquant is also an `optionalDependency` (`pngquant-bin`), so on a platform it has a prebuilt
+for you may already have it. It has no `linux/arm64` or `darwin/arm64` build and its install
+chain is elderly, which is exactly why it is optional: a failed install is a warning, not a
+broken `npm i`.
+
+If favcon cannot find something, it says so — all of them at once, with the install lines.
+`FAVCON_RESVG`, `FAVCON_PNGQUANT` and `FAVCON_OXIPNG` point it at a binary directly.
+
+For CI, prefer pinned release tarballs over `cargo install`: they land in seconds instead of
+minutes, and they pin the exact toolchain your byte counts were measured with. See
+`.github/workflows/ci.yml` for a worked example. Note that upstream resvg has shipped no
+Windows binary since v0.47.0.
+
+Node 22.12 or newer.
+
+## What you get
+
+| File | What it is |
+|---|---|
+| `logo.svg` | The mark itself. Optimised, **animation intact**. For pages and READMEs. |
+| `icon.svg` | The same optimisation **plus a structural animation strip**. This is the browser favicon *and* the file every raster below is rendered from. |
+| `favicon.ico` | One 32×32 entry, stored as a raw PNG in a 22-byte container. |
+| `apple-touch-icon.png` | 180×180 (60pt @3x; no iPhone renders above @3x) on an opaque ground. |
+| `icon-<size>.png` | Rendered natively at each `--sizes` entry. Default 192 and 512 — 192 is the token Chrome's PWA installability check looks for. |
+| `site.webmanifest` | Only with `--manifest`. Icons only — you merge your own `name` and `theme_color`. |
+
+Two SVGs, because they are not the same file. `icon.svg` is what a `<link rel="icon">` points
+at, and a favicon carrying `<style>`, `@keyframes` and classes is bytes no rasteriser and no
+ICO can use. `logo.svg` is the mark, animation and all, for the places that can show it.
+
+## Why not one of the others
+
+There are several favicon generators on npm. None of them recompress, which is the whole
+point of this one — you can see it in their dependency trees: no quantiser, no zopfli, one
+encode and done.
+
+| | weekly | dependencies |
+|---|---|---|
+| [`favicons`](https://www.npmjs.com/package/favicons) | ~388k | `sharp` `xml2js` `escape-html` |
+| [`astro-favicons`](https://www.npmjs.com/package/astro-favicons) | ~4.1k | `favilib` `ultrahtml` |
+| [`favgen`](https://www.npmjs.com/package/favgen) | ~5 | `svgo` `sharp` `is-svg` `to-ico` `commander` |
+
+`favicons` is thorough — it will write you thirty files for platforms that stopped existing —
+and the PNGs are whatever sharp's encoder produced. `astro-favicons` wraps the same engine
+for Astro. `favgen` is a thinner wrapper around sharp.
+
+favcon does fewer files and more work on each: quantise, compare three candidate encodings,
+recompress the winner with zopfli, and check the result against the original with a pixel
+gate. It also does the thing none of them do — keeps your animation in one file and
+guarantees it is *absent* from the other.
+
+If you want thirty files for thirty platforms, use `favicons`. If you want six files that are
+as small as they can be, this one.
+
+## Flags
+
+```
+-o, --out DIR     Output directory (default: current)
+    --colors N    Palette size, 2-256 (default: 8)
+    --sizes LIST  Standalone PNG sizes (default: "192 512")
+    --bg COLOR    Opaque ground for apple-touch-icon (default: #000000). "none" keeps alpha.
+    --var N=V     Set a CSS custom property, e.g. --var brand=#0E7C68. Repeatable.
+    --no-animation  Build logo.svg static too, so it equals icon.svg.
+    --manifest    Also write site.webmanifest.
+    --html        Print the <link> tags.
+-q, --quiet   -V, --version   -h, --help
+```
+
+Long options also accept `--opt=value`; `--` ends option parsing. A flag that takes no
+argument rejects one.
+
+### `--var`
+
+Your mark can be a template. `var(--brand, #0E7C68)` renders as `#0E7C68` by default, the way
+a browser resolves an undefined property, and `--var brand=#7C0E68` overrides it:
+
+```sh
+favcon logo.svg --var brand=#7C0E68 --out public
+```
+
+A `var()` with no fallback and no override is an error, not a black square. (resvg has no
+`var()` support at all — it renders the whole mark black and warns on stderr — so favcon
+resolves every custom property before anything is rasterised.)
+
+### `--bg`
+
+iOS composites transparent Home Screen icons onto **black**, so `apple-touch-icon.png` gets
+an opaque ground rather than an alpha channel it would lose anyway. The default is `#000000`
+— what the platform would have done to a transparent icon regardless, minus the tRNS chunk —
+and favcon warns when you did not choose, because the right ground is a property of your mark
+and not of the format. `--bg '#fff'` for a mark drawn on light, `--bg none` to keep the alpha.
+
+The value is validated by asking resvg to render a 1×1 pixel with it, so anything resvg takes
+works — `#fff`, `rebeccapurple`, `rgb(14 124 104)`, `hsl(170 80% 27%)` — and the validator can
+never disagree with the renderer.
+
+## Animation
+
+Animation lands in `logo.svg` and nowhere else. Feed favcon an animated mark and you get a
+`logo.svg` that still moves, an `icon.svg` with the motion structurally removed, and rasters
+rendered from the second one — so "the rasters are the rest frame" is a property of the
+pipeline rather than a hope about resvg's CSS support.
+
+For that to work, the mark has to follow four rules:
+
+- **The geometry as drawn is the rest frame.** Nothing is positioned by a keyframe, so resvg,
+  `--no-animation` and a reduced-motion viewer all see the same mark.
+- **Motion lives inside `@media (prefers-reduced-motion: no-preference)`.** Everything inside
+  such a block is treated as motion and removed wholesale.
+- **Iterations are `var(--loop, infinite)`.** Every keyframe set ends on the rest frame, so
+  `--var loop=1` plays once and stops on the static mark.
+- **Each palette class is used once per file**, so it can be inlined. Where several shapes
+  share a colour, put the class on a wrapper `<g>`.
+
+The strip is structural, not a regex: SMIL elements, `@keyframes`, any `@media` mentioning
+`prefers-reduced-motion`, and `animation-`/`transition-` declarations wherever they are —
+including inside `style=""`. A non-motion declaration sharing a `style` attribute with a
+motion one survives.
+
+`--no-animation` builds `logo.svg` static too. A source with no animation gets `logo.svg` as a
+byte copy of `icon.svg`.
+
+## Astro
+
+```js
+// astro.config.mjs
+import favcon from 'favcon/astro'
+
+export default defineConfig({
+  integrations: [favcon({ input: 'src/logo.svg' })],
+})
+```
+
+That is all of it. The files land in `public/`, the `<link>` tags are spliced into every page
+that does not already declare an icon, and `config.base` is prefixed for you.
+
+Options mirror the CLI, except that `sizes` is a real array and `vars` is an object — that is
+what the flags *mean*; the string forms exist only because argv is strings. `manifest` may
+take an object (`name`, `short_name`, `theme_color`, …) which is merged into the icons; the
+CLI writes icons-only because a CLI cannot know your app's name, but an integration can.
+
+```js
+favcon({
+  input: 'src/logo.svg',
+  sizes: [192, 512],
+  vars: { brand: '#0E7C68' },
+  manifest: { name: 'Example', short_name: 'Ex', theme_color: '#0E7C68' },
+  dev: 'fast',       // 'fast' | 'full' | 'skip'
+  head: 'inject',    // 'inject' | 'component' | false
+})
+```
+
+**It does not rebuild on every dev-server restart.** The cache is content-addressed, not a
+heuristic: keyed on favcon's version, the input bytes, the canonicalised options **and the
+`--version` strings of resvg, pngquant and oxipng**. That last part is what makes it correct
+— all three change their output across releases, so a cache keyed only on the SVG would hand
+back stale files after a `brew upgrade`, invisibly. A hit hardlinks into `public/` in
+single-digit milliseconds.
+
+For a genuinely cold first run, `dev: 'fast'` (the default) builds one 256 px size with zopfli
+off: under a second instead of ~13, since zopfli is ~98 % of the wall clock. Dev artefacts are
+deliberately not the production bytes.
+
+**Head tags.** Astro has no official head-injection hook — all four `injectScript` stages are
+JavaScript, and a `<link rel="icon">` written by a script is found after the browser has
+already asked for `/favicon.ico`. So `head: 'inject'` (the default) is an `order: 'post'`
+middleware that splices before `</head>` and skips any page that already contains
+`rel="icon"`. `head: 'component'` gives you `favcon/astro/Head.astro` to place yourself, and
+`head: false` logs the block for pasting.
+
+favcon **will not overwrite a `public/favicon.ico` it did not write itself.** Silently
+clobbering a hand-tuned ICO is the worst possible first impression, so the check is on
+content: delete the file, or point the integration elsewhere.
+
+## How it decides
+
+Every step was chosen by measurement. The reasoning is in
+**[docs/DECISIONS.md](docs/DECISIONS.md)**, and the current numbers — regenerated by
+`node bench/bench.mjs --write` — are in **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)**.
+
+The short version, because these are the parts that look wrong until you know why:
+
+- **Quantise before you recompress.** pngquant re-encodes from scratch, so any order ending in
+  pngquant throws away everything oxipng did — measured at 256 px, the wrong order is just
+  under 10 % bigger.
+- **An ICO holding a PNG is a 22-byte header plus that PNG verbatim**, so nothing can be
+  optimised after packing. favcon writes that header itself, byte-identical to
+  `icotool -c -r`, which removes the only dependency with no npm package and no Windows build.
+  The BMP payload `icotool` writes by default is 16× larger.
+- **Zopfli runs once**, on the file that already won the lossy/lossless comparison. Running it
+  on both sides costs three times as much for identical bytes.
+- **The rasters are built serially on purpose.** Zopfli is ~98 % of wall clock so overlapping
+  looked obvious — but oxipng already saturates the machine on a single file. Measured over
+  four interleaved repetitions: 13.80 s serial, 14.08 s concurrent.
+
+## Licence
+
+MIT. favcon *spawns* pngquant (GPL-3.0+) and resvg (MPL-2.0) across a process boundary —
+mere aggregation, no linking.

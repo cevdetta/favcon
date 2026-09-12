@@ -1,0 +1,39 @@
+// Hand-written, because the options are a deliberately smaller surface than the CLI's argv
+// and a generated type would describe the argv shape instead.
+
+import type { AstroIntegration } from 'astro';
+
+export interface FavconOptions {
+  /** The mark, relative to the project root. Default: `src/logo.svg`. */
+  input?: string;
+  /** Standalone PNG sizes. A real array - the CLI's string form exists only because argv is strings. Default: `[192, 512]`. */
+  sizes?: number[];
+  /** Palette size, 2-256. Default: 8. Raise it to 16 for a mark with gradients. */
+  colors?: number;
+  /** Opaque ground for apple-touch-icon. `null` keeps the alpha. Default: `#000000`. */
+  bg?: string | null;
+  /** CSS custom properties, with or without the leading `--`. */
+  vars?: Record<string, string | number>;
+  /** `false` builds logo.svg static too, so it equals icon.svg. Default: `true`. */
+  animation?: boolean;
+  /**
+   * `true` writes an icons-only site.webmanifest. An object is merged in ahead of the
+   * icons - the CLI cannot know your app's name, an integration can.
+   */
+  manifest?: boolean | Record<string, unknown>;
+  /**
+   * What to build while the dev server runs.
+   * `'fast'` (default) is one 256 px size with zopfli off: under a second instead of ~13,
+   * and deliberately not the production bytes. `'full'` builds the real set. `'skip'`
+   * builds nothing.
+   */
+  dev?: 'fast' | 'skip' | 'full';
+  /**
+   * `'inject'` (default) splices the tags before `</head>`, skipping any page that already
+   * declares an icon. `'component'` leaves it to `favcon/astro/Head.astro`. `false` logs the
+   * block for you to paste.
+   */
+  head?: 'inject' | 'component' | false;
+}
+
+export default function favcon(options?: FavconOptions): AstroIntegration;

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+     role="img" aria-label="Tiles, one of them blinking">
+  <style>
+    .base  { fill: var(--base, #2F4858); }
+    .spark { fill: var(--spark, #F6AE2D); }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .blink { animation: blink 3.2s steps(1, end) var(--loop, infinite); }
+    }
+
+    @keyframes blink {
+      0%, 62%  { fill: var(--spark, #F6AE2D); }
+      66%, 74% { fill: var(--base, #2F4858); }
+      78%, 86% { fill: var(--spark, #F6AE2D); }
+      90%, 96% { fill: var(--base, #2F4858); }
+      100%     { fill: var(--spark, #F6AE2D); }
+    }
+  </style>
+  <path class="base" d="M32 32h128v128H32ZM192 32h128v128H192ZM32 192h128v128H32ZM32 352h128v128H32ZM192 352h128v128H192ZM352 352h128v128H352Z"/>
+  <path class="spark blink" d="M352 32h128v128H352Z"/>
+</svg>
