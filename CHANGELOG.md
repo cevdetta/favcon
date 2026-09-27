@@ -11,6 +11,16 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Added
 
+- `icon-maskable-512.png`: the mark placed in the W3C safe zone (a circle of radius 40 %) on
+  `--bg`, listed by `--manifest` as the `maskable` icon for Android, ChromeOS and macOS, after
+  the `any` icons. Written by default; `--bg none` writes no maskable icon, since one has to be
+  opaque. `icon.svg` is never listed in the manifest (crbug.com/40925759).
+- The placement is measured, not padded: the farthest opaque pixel decides the scale at the
+  icon's own size, and the scale then snaps down, within 10 %, to a size where the mark lands on
+  whole pixels if that at least halves its anti-aliased pixels. `build()` returns it as
+  `fit: { apple, maskable }`, and `placeInSafeZone()` is exported so the test suite's reference
+  places the mark identically.
+
 - `favcon/astro`: an Astro integration. Builds in `astro:build:start` so Astro's ordinary
   `public/` copy carries the files to `outDir` — correct for static output and for every SSR
   adapter. Head tags via an `order: 'post'` middleware, a `<Head />` component, or logged for
@@ -33,10 +43,13 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Changed
 
-- **`--sizes` now defaults to `192 512`, was `256 512`.** Chrome's installability check
-  matches the declared `sizes` token rather than the pixel dimensions, so a manifest with no
-  literal `192x192` entry can silently fail to offer a PWA install prompt. `--sizes "256 512"`
-  restores the old ladder. This renames an output file: `icon-256.png` becomes `icon-192.png`.
+- **`apple-touch-icon.png` now places the mark inside the safe zone.** It stays 180 px. iOS
+  cuts the icon to a rounded square; unplaced, a mark with a 6 % margin lost 12 corner pixels to
+  it. This changes the bytes of every `apple-touch-icon.png`, and the accuracy gate's reference
+  for it is the placed source.
+- **`--sizes` now defaults to `192 512`, was `256 512`.** web.dev's install criteria, Chrome's
+  docs and MDN all ask for a 192 and a 512 `any` icon. This renames an output file:
+  `icon-256.png` becomes `icon-192.png`.
 - **`--bg` now defaults to `#000000`, was `#ffffff`.** iOS composites a transparent Home
   Screen icon onto black, so black is what the platform would have produced anyway; the
   default now says so instead of substituting white. A mark drawn on a light ground wants

@@ -54,7 +54,7 @@ conflict, the bar wins — which is what decision 6 below turns on.
 | 8 | **Zopfli runs once, on the winner of that comparison**, at `--zi 120`. **Re-measured** (idle machine; the timings are worthless on a loaded one): 30 172 B at `--zi 15` in 30 s, 29 985 B at 120 in 169 s (−0.62 %), 29 962 B at 240 in 315 s (−0.70 %). 120 costs 5.7× the time of the default to save 0.62 %; 240 doubles that again for a further 0.08 pp, so the knee is at 120. | Zopfli-ing both paths triples the cost for zero extra bytes: decide with the cheap `-o max -s` pass, then zopfli only the winner. **Use the long flag `--zopfli`:** oxipng 10.0.0 changed the short form from `-Z` to `-z`, and `-Z` survives only as an undocumented compatibility alias — the long form is the one that is correct on both 9.x and 10.x. |
 | 9 | **`favicon.ico`: one 32×32 entry, raw PNG payload, container written in JS.** **Re-measured:** the BMP payload icotool writes by default is **16.4× larger** (39 340 B vs 2 403 B over the fixtures), and favcon's 22-byte writer is **byte-identical to `icotool -c -r` on 10/10**. | That removes the only dependency with no npm package and no Windows build. `wBitCount` is the field to get wrong: the directory entry describes the *decoded* 32-bit image, not the encoding, so it is 32 even for a 4-bit paletted payload — and `bColorCount` is 0 for one too. |
 | 10 | **`--bg` defaults to opaque black**, with a stderr warning when it is not given, **validated by probing resvg** (a 1×1 render, ~3 ms) rather than by a colour table. | iOS composites transparent Home Screen icons onto **black**, so black is what the platform would have produced from a transparent icon anyway — the default now matches that instead of quietly substituting white, and the file is smaller for it (no tRNS, simpler palette). A mark drawn on a light ground wants `--bg '#fff'`, which is why the warning fires whenever the flag is absent. Probing means `rgb()`, `rgba()` and `hsl()` all work and the validator can never disagree with the renderer — a name list rejects `rgb()`, and a loose `/^[A-Za-z]+$/` accepts `nonered`. Applies to `apple-touch-icon.png` only. Corners stay square; the OS applies its own mask. |
-| 11 | **`--sizes` defaults to `192 512`.** *(Reversed. The original decision was `256 512` with no 192, and recorded the consequence below as acceptable; it is not.)* | Chrome's installability check matches the declared `sizes` **token**, not the pixel dimensions, so a manifest without a literal `192x192` entry can fail to offer an install prompt at all. That is a silent, hard-to-diagnose failure in the one output the manifest exists for, and it is not worth 64 px of extra ladder to avoid. 256 remains one `--sizes` away for anyone who wants it. |
+| 11 | **`--sizes` defaults to `192 512`.** *(Reversed. The original was `256 512`.)* | The documentation every browser is held to asks for both: web.dev's install criteria ("must include a 192px and a 512px icon", 2024-09-19), Chrome's Lighthouse installable-manifest doc (2024-04-16) and MDN's Making PWAs installable (2026-09-07). Desktop Chromium's code is looser: `installable_evaluator.cc` accepts one `any` icon of 144 px or more, and Chromium 152's `Page.getInstallabilityErrors` reported no error for a manifest with only a 512. That is one engine on one platform, with Android, Edge, Samsung Internet and Firefox untested, so the documented pair wins; the 192 costs 159 B on a flat mark. SVG cannot stand in for either: an SVG entry makes the Android WebAPK install fail ([crbug.com/40925759](https://issues.chromium.org/issues/40925759)). |
 | 12 | **The SVG is emitted twice: `logo.svg` keeps the animation, `icon.svg` never has it.** | Publishing the stripped copy costs nothing — it was already being built — and removes the one thing a single-file layout got wrong: a favicon `<link>` pointing at a file carrying `<style>`, `@keyframes` and classes that no rasteriser and no ICO can use. **Re-measured:** every raster is byte-identical between the default and `--no-animation` builds, and `icon.svg` is the smaller of the two on every fixture. |
 | 13 | **The rasters stay serial.** **Re-measured and confirmed — though not for the reason originally given; see the note below the table.** | Zopfli is ~98 % of wall clock, so overlapping it looked obvious — it is not. Four interleaved reps each: **13.80 s serial vs 14.08 s concurrent**. A `-t` sweep (2/4/6/8/10/12/16) moved contention around without beating it. The concurrency originally spent on the two svgo passes (0.894 s → 0.456 s) is gone, though not for the reason first recorded: see decision 1 — importing svgo replaced two ~180 ms concurrent spawns with one 309 ms import. The `--bg` probe is still overlapped, because it is a real spawn. |
 | 14 | **One render per distinct (size, background).** | `--sizes 32` otherwise rasterises and zopflis 32 px twice, once for `icon-32.png` and once for the ICO payload, for identical bytes. De-duplicating also makes "the ICO payload is `icon-32.png`" true by construction rather than by coincidence. |
@@ -194,21 +194,63 @@ a mark whose motion selects nothing by class still gets the full inlining.
 
 ### 19. `--colors` stays at 8, and that is a trade rather than a clean win
 
-The 1.0 % accuracy bar is met at `--colors 16`. It is **not** met at 8 on every mark that
-ships here — worst 1.87 % on `heavy.svg`, which exists to be adversarial, with `general` and
-`animated` also over on the 180 px apple icon. See the table in `docs/BENCHMARKS.md`.
+The 1.0 % accuracy bar is met at `--colors 16` on every file. It is **not** met at 8 on every
+mark that ships here: worst 1.87 % on `heavy.svg` at 192 px, which exists to be adversarial,
+with `general`, `flat`, `mask` and `animated` also over at 192, and `flat` (1.11 %) and
+`animated` (1.12 %) over on the 180 px apple icon. Every 512 px file is inside at 8 (worst
+0.71 %, `heavy`). A small icon is mostly edge pixels. See the table in `docs/BENCHMARKS.md`.
 
 8 is the default anyway, and the reasoning is worth stating plainly rather than hiding behind
 the bar:
 
 - It is **~18 % smaller** across the corpus, and bytes are what this tool is for.
-- The marks that miss the bar are the ones with smooth colour ramps. A logo usually is not
-  one: at 8 and 180 px `tiles.svg` scores **0.05 %**, `second` 0.37 %, `flat` 0.79 %. For a flat mark,
-  16 spends 18 % more bytes to improve something already two orders of magnitude inside.
+- The misses are anti-aliased edges at small sizes and smooth colour ramps. A mark drawn on
+  a pixel grid has neither: `tiles.svg` scores **0.00 %** at 8 on every file, `wide` at most
+  0.13 %. For such a mark, 16 spends 18 % more bytes to improve nothing.
 - The failure mode is graceful and visible — banding on a gradient — not a broken file, and
   `--colors 16` is one flag away with a table saying when to reach for it.
 
 So the bar describes the pipeline's capability, and the default picks a point below it on
 purpose. Both halves are pinned by a test: one asserts the default really is 8, the other
-asserts 8 really does miss the bar on `heavy`. If either stops being true, the trade has
+asserts 8 really does miss the bar on `heavy` at 192 px. If either stops being true, the trade has
 changed and this decision needs rewriting rather than quietly drifting.
+
+### 20. Masked icons at their documented sizes, placed by measurement, snapped to whole pixels
+
+**Which files the platforms read:**
+
+| Consumer | What it reads | Source |
+|---|---|---|
+| Chrome install criteria | `any` icons at 192 and 512 px (the code on desktop accepts one of 144 px or more) | web.dev, Chrome docs, MDN; `installable_evaluator.cc` |
+| Chrome's launcher icon (Android, ChromeOS, macOS) | `maskable` first, falling back to `any`; Android's minimum is 83 px | `installable_icon_fetcher.cc` |
+| Android WebAPK | PNG and JPEG are sent to the server; an SVG entry fails the install | `webapk_single_icon_hasher.cc`, crbug.com/40925759 |
+| iOS and iPadOS | `apple-touch-icon` over manifest icons; 180, 167 and 152 px documented; `purpose` and SVG ignored | Apple's Configuring Web Applications, firt.dev's iOS PWA notes |
+| Windows | `any` icons, drawn without a plate on light and dark | Microsoft Learn, app icon and PWA icon guidance |
+
+**Two masked files, at the documented sizes.** `apple-touch-icon.png` stays 180 px, the largest
+size Apple documents. `icon-maskable-512.png` is one 512 px maskable icon, the size web.dev's
+and Evil Martians' sets use; Chrome picks it by size and scales it down. An earlier draft of
+this decision made a single 512 px `apple-touch-icon.png` serve both. No source recommends a
+512 px apple icon, so it was reverted: Apple's guide only says iOS would scale a larger one.
+
+**`any` stays transparent and separate.** Windows shows app icons without a tile, so a padded
+opaque icon there reads as a small square; web.dev advises against `"any maskable"` on one file
+for the same reason.
+
+**Measured placement.** The farthest opaque pixel's outer corner, found on a render at the
+icon's own size, decides the scale. On the C mark, iOS's 22.37 % rounded mask cut 12 of 14 310
+mark pixels from the unplaced 180 px icon, and none after.
+
+**Snapped to whole pixels.** An exact fit put every edge of the C mark between pixels:
+
+| Icon | Placement | Mark box | Colours | Edge pixels | Bytes at `--colors 8` |
+|---|---|---|---|---|---|
+| maskable 512 | exact fit | 330 px | 12 | 1 905 | 571 B |
+| maskable 512 | snapped | 320 px | 3 | 0 | 290 B |
+| apple 180 | snapped | 112 px (fit 116) | 3 | 0 | 151 B |
+
+The snap walks the box down in whole even pixels (so the offset is whole too) and stops at
+10 % below the fit. It takes the size with the fewest partly covered pixels, and only when that
+at least halves them, so a curved mark, anti-aliased at every size, keeps its exact fit and is
+never shrunk for nothing. The renders are a handful of transparent resvg calls per icon,
+milliseconds each, against a build of seconds.

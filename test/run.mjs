@@ -80,12 +80,12 @@ describe('the output set', { skip: skipNoTools }, () => {
   it('produces exactly the promised files and nothing else', async () => {
     const { out } = await DEFAULT_BUILD();
     assert.deepEqual(readdirSync(out).sort(),
-      ['apple-touch-icon.png', 'favicon.ico', 'icon-192.png', 'icon-512.png', 'icon.svg', 'logo.svg']);
+      ['apple-touch-icon.png', 'favicon.ico', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon.svg', 'logo.svg']);
   });
 
   it('renders every size exactly', async () => {
     const { out } = await DEFAULT_BUILD();
-    for (const [file, px] of [['apple-touch-icon.png', 180], ['icon-192.png', 192], ['icon-512.png', 512]]) {
+    for (const [file, px] of [['apple-touch-icon.png', 180], ['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
       const h = header(readFileSync(join(out, file)));
       assert.equal(h.width, px, `${file} width`);
       assert.equal(h.height, px, `${file} height`);
@@ -238,9 +238,10 @@ describe('accuracy', { skip: skipNoTools }, () => {
   // at 32 px a mark is 1024 pixels of which nearly all are anti-aliasing edges, and no palette
   // reproduces that to 8/255 - the size table in docs/BENCHMARKS.md shows the whole curve.
   const CHECKS = [
-    ['apple-touch-icon.png', 180, '#000000'],   // background-matched reference, not the
-    ['icon-192.png', 192, null],                // transparent one: the ground is not error
-    ['icon-512.png', 512, null],
+    ['apple-touch-icon.png', 180, '#000000', true],   // background-matched and placed: the
+    ['icon-192.png', 192, null, false],               // ground and the placement are not error
+    ['icon-512.png', 512, null, false],
+    ['icon-maskable-512.png', 512, '#000000', true],
   ];
 
   // Built at --colors 16, NOT at the default of 8. The bar is a claim about the pipeline,
@@ -267,8 +268,8 @@ describe('accuracy', { skip: skipNoTools }, () => {
     it(`${name}: every raster is inside the bar`, async () => {
       const { out } = await accuracyBuild(name);
       const source = fixture(`${name}.svg`);
-      for (const [file, px, bg] of CHECKS) {
-        const ref = await reference(resvg, { source, px, bg, vars: {} });
+      for (const [file, px, bg, fitted] of CHECKS) {
+        const ref = await reference(resvg, { source, px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(out, file))), ref);
         assert.ok(s.pct <= THRESHOLD_PCT,
           `${name}/${file}: pct ${s.pct.toFixed(4)}% > ${THRESHOLD_PCT}% (rmse ${s.rmse.toFixed(2)})`);
@@ -315,7 +316,11 @@ describe('optional outputs and option syntax', () => {
     const r = await cli(['--bg', '#fff', '--manifest', '--sizes', '32 64', '-o', out, fixture('flat.svg')]);
     assert.equal(r.code, 0, r.stderr);
     const m = JSON.parse(readFileSync(join(out, 'site.webmanifest'), 'utf8'));
-    assert.deepEqual(m.icons.map((i) => i.sizes), ['32x32', '64x64']);
+    assert.deepEqual(m.icons.map((i) => [i.src, i.sizes, i.purpose]), [
+      ['/icon-32.png', '32x32', undefined],
+      ['/icon-64.png', '64x64', undefined],
+      ['/icon-maskable-512.png', '512x512', 'maskable'],
+    ]);
     for (const i of m.icons) assert.equal(i.type, 'image/png');
   });
 
@@ -329,7 +334,7 @@ describe('optional outputs and option syntax', () => {
     assert.equal(m.name, 'Example');
     assert.equal(m.short_name, 'Ex');
     assert.equal(m.theme_color, '#0E7C68');
-    assert.deepEqual(m.icons.map((i) => i.sizes), ['32x32']);
+    assert.deepEqual(m.icons.map((i) => i.sizes), ['32x32', '512x512']);
   });
 
   it('--html prints the link set with sizes="32x32" on the ICO', { skip: skipNoTools }, async () => {
@@ -363,6 +368,138 @@ describe('optional outputs and option syntax', () => {
     const r = await cli(['--bg', '#fff', '--', '--not-a-flag.svg']);
     assert.equal(r.code, 1);
     assert.match(r.stderr, /^favcon: no such file: --not-a-flag\.svg$/m);
+  });
+});
+
+
+// ------------------------------------------------------------ masked icons --
+
+describe('the masked icons', { skip: skipNoTools }, () => {
+  const BG = '#123456';
+  const MASKED = (name, extra = {}) =>
+    buildOnce(`masked-${name}${JSON.stringify(extra)}`, { input: fixture(`${name}.svg`), sizes: [32], bg: BG, zopfli: false, ...extra });
+
+  // Distance from the icon's centre to the FAR corner of a pixel, so the whole pixel counts.
+  const reach = (x, y, px) => Math.hypot(
+    Math.max(Math.abs(x - px / 2), Math.abs(x + 1 - px / 2)),
+    Math.max(Math.abs(y - px / 2), Math.abs(y + 1 - px / 2)));
+  // Everything that is not the ground. Quantisation may nudge the ground by a few levels, so
+  // the test is "far from it" rather than "equal to it".
+  const markPixels = (img, [r, g, b]) => {
+    const out = [];
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const o = (y * img.width + x) * 4;
+        if (Math.abs(img.data[o] - r) + Math.abs(img.data[o + 1] - g) + Math.abs(img.data[o + 2] - b) > 24) out.push([x, y]);
+      }
+    }
+    return out;
+  };
+  const farthest = (out, file, px) => {
+    const img = decode(readFileSync(join(out, file)));
+    const pts = markPixels(img, [0x12, 0x34, 0x56]);
+    assert.ok(pts.length > 0, `no mark pixels found in ${file}`);
+    return Math.max(...pts.map(([x, y]) => reach(x, y, px)));
+  };
+  const ICONS = [['apple-touch-icon.png', 180, 'apple'], ['icon-maskable-512.png', 512, 'maskable']];
+
+  it('are a 180px apple-touch-icon and one 512px maskable icon, both opaque', async () => {
+    const { out } = await MASKED('general');
+    assert.deepEqual(readdirSync(out).sort(),
+      ['apple-touch-icon.png', 'favicon.ico', 'icon-32.png', 'icon-maskable-512.png', 'icon.svg', 'logo.svg']);
+    for (const [file, px] of ICONS) {
+      const buf = readFileSync(join(out, file));
+      assert.equal(header(buf).width, px, `${file} width`);
+      assert.equal(header(buf).height, px, `${file} height`);
+      const img = decode(buf);
+      for (let i = 3; i < img.data.length; i += 4) {
+        if (img.data[i] !== 255) assert.fail(`transparent pixel at ${(i - 3) / 4} in ${file}`);
+      }
+    }
+  });
+
+  it('keep a curved mark at its exact fit: every pixel inside the safe circle, and filling it', async () => {
+    const { out, fit } = await MASKED('general');
+    for (const [file, px, key] of ICONS) {
+      assert.equal(fit[key].snapped, false, `${file}: a curved mark was shrunk to snap to pixels it never lands on`);
+      const far = farthest(out, file, px), safe = 0.4 * px;
+      assert.ok(far <= safe + 1.5, `${file}: a mark pixel reaches ${far.toFixed(1)} px; the safe circle ends at ${safe}`);
+      assert.ok(far >= safe - 3, `${file}: the mark stops ${(safe - far).toFixed(1)} px short of the safe circle`);
+    }
+  });
+
+  it('snap a pixel-grid mark to whole pixels, within 10% of the fit, and lose its anti-aliasing', async () => {
+    // tiles.svg is drawn on a grid: at its exact fit every edge falls between pixels.
+    const { out, fit } = await MASKED('tiles');
+    assert.equal(fit.maskable.snapped, true, `not snapped (box ${fit.maskable.box})`);
+    const far = farthest(out, 'icon-maskable-512.png', 512), safe = 0.4 * 512;
+    assert.ok(far <= safe + 1.5, `a mark pixel reaches ${far.toFixed(1)} px`);
+    assert.ok(far >= safe * 0.9 - 2, `snapped ${(100 - far / safe * 100).toFixed(1)}% below the fit; the window is 10%`);
+    const colours = (file, opaqueOnly) => {
+      const img = decode(readFileSync(join(out, file)));
+      const set = new Set();
+      for (let i = 0; i < img.data.length; i += 4) {
+        if (!opaqueOnly || img.data[i + 3] === 255) set.add((img.data[i] << 16) | (img.data[i + 1] << 8) | img.data[i + 2]);
+      }
+      return set.size;
+    };
+    const masked = colours('icon-maskable-512.png', false), source = colours('icon-32.png', true);
+    assert.ok(masked <= source + 1, `${masked} colours: the snapped icon still carries edge blends`);
+  });
+
+  it('enlarge a mark drawn small, because its own margin means nothing under a mask', async () => {
+    // flat.svg is a circle of radius 19/64: it reaches 0.30 of the icon, inside the 0.40 zone.
+    const { fit } = await MASKED('flat');
+    for (const key of ['apple', 'maskable']) {
+      assert.ok(fit[key].scale > 1.2 && fit[key].scale < 1.5, `${key} scale ${fit[key].scale}`);
+    }
+  });
+
+  it('are inside the accuracy bar against references placed the same way', async () => {
+    const { out } = await MASKED('general', { colors: 16 });
+    const resvg = await toolPath('resvg');
+    for (const [file, px] of ICONS) {
+      const ref = await reference(resvg, { source: fixture('general.svg'), px, bg: BG, vars: {}, fitted: true });
+      const s = score(decode(readFileSync(join(out, file))), ref);
+      assert.ok(s.pct <= THRESHOLD_PCT, `${file}: pct ${s.pct.toFixed(4)}%`);
+    }
+  });
+
+  it('list the maskable icon after the "any" ones, and never icon.svg or the apple icon', async () => {
+    const out = freshDir();
+    const r = await cli(['--bg', '#fff', '--manifest', '--sizes', '32', '-o', out, fixture('flat.svg')]);
+    assert.equal(r.code, 0, r.stderr);
+    const m = JSON.parse(readFileSync(join(out, 'site.webmanifest'), 'utf8'));
+    assert.deepEqual(m.icons.map((i) => [i.src, i.sizes, i.purpose]),
+      [['/icon-32.png', '32x32', undefined], ['/icon-maskable-512.png', '512x512', 'maskable']]);
+    assert.ok(!m.icons.some((i) => i.src.endsWith('.svg')), 'an SVG entry breaks Android WebAPK installs');
+    assert.match(r.stdout, /apple-touch-icon\.png .* mark at \d+px of 180 in the safe zone/);
+    assert.match(r.stdout, /icon-maskable-512\.png .* mark at \d+px of 512 in the safe zone/);
+  });
+
+  it('write no maskable icon when --bg none keeps the apple icon transparent', async () => {
+    const out = freshDir();
+    const r = await cli(['--bg', 'none', '--manifest', '--sizes', '32', '-o', out, fixture('flat.svg')]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(!existsSync(join(out, 'icon-maskable-512.png')), 'a transparent maskable icon was written');
+    const m = JSON.parse(readFileSync(join(out, 'site.webmanifest'), 'utf8'));
+    assert.deepEqual(m.icons.map((i) => i.src), ['/icon-32.png']);
+  });
+
+  it('use a full-bleed source as it is', async () => {
+    const svg = join(scratch, 'bleed.svg');
+    writeFileSync(svg, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+      '<rect width="64" height="64" fill="#0E7C68"/><circle cx="32" cy="32" r="20" fill="#F4F1EA"/></svg>');
+    const out = freshDir();
+    const r = await build({ input: svg, out, sizes: [32], bg: '#000000', zopfli: false });
+    for (const [file, px, key] of ICONS) {
+      assert.equal(r.fit[key].fullBleed, true, key);
+      assert.equal(r.fit[key].box, px, key);
+      // The --bg ground never shows: the corner is the source's own ground, not black.
+      const img = decode(readFileSync(join(out, file)));
+      assert.ok(Math.abs(img.data[0] - 0x0E) + Math.abs(img.data[1] - 0x7C) + Math.abs(img.data[2] - 0x68) < 24,
+        `${file}: corner pixel is ${[...img.data.slice(0, 3)]}, expected the source's own ground`);
+    }
   });
 });
 
@@ -813,7 +950,7 @@ describe('the astro integration', () => {
 
       const pub = join(root, 'public');
       assert.deepEqual(readdirSync(pub).sort(),
-        ['apple-touch-icon.png', 'favicon.ico', 'icon-32.png', 'icon.svg', 'logo.svg']);
+        ['apple-touch-icon.png', 'favicon.ico', 'icon-32.png', 'icon-maskable-512.png', 'icon.svg', 'logo.svg']);
 
       const before = readFileSync(join(pub, 'favicon.ico'));
       s.calls.logs.length = 0;

@@ -63,7 +63,7 @@ is the opposite case, where the same class is named both inside and outside the 
 inlining has to be switched off. Both directions are asserted; neither alone is enough.
 
 `heavy.svg` is also the tightest fixture in the suite, and deliberately so: at the default palette it
-sits around 0.9 % against a 1.0 % bar, on the 180 px apple icon. If it is the *only* thing
+sits around 0.8 % against a 1.0 % bar, on the 180 px apple icon. If it is the *only* thing
 that fails after a toolchain bump, that is the fixture doing its job — run
 `node bench/bench.mjs accuracy` and compare against `docs/BENCHMARKS.md` before concluding
 favcon regressed.

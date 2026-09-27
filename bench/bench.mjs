@@ -29,7 +29,13 @@ const OUT = join(HERE, 'out');
 
 // Every fixture that builds. The negative ones do not, by design.
 const MARKS = ['general', 'flat', 'second', 'mask', 'heavy', 'animated', 'tiles', 'wide', 'gradient', 'smil'];
-const SIZES = [180, 192, 512];
+// [label, px, file, ground, placed]: every raster a default build writes except the ICO.
+const CHECKS = [
+  ['180m', 180, 'apple-touch-icon.png', '#000000', true],
+  ['192', 192, 'icon-192.png', null, false],
+  ['512', 512, 'icon-512.png', null, false],
+  ['512m', 512, 'icon-maskable-512.png', '#000000', true],
+];
 
 const size = (p) => statSync(p).size;
 const pad = (s, n) => String(s).padEnd(n);
@@ -67,19 +73,17 @@ sweeps.accuracy = async () => {
   const rows = [];
   let worst = { pct: 0 };
   for (const m of MARKS) {
-    for (const px of SIZES) {
+    for (const [label, px, file, bg, fitted] of CHECKS) {
       const cells = [];
       for (const c of cols) {
-        const out = join(OUT, 'acc', `${m}-${c}-${px}`);
-        await build({ input: join(FIXTURES, `${m}.svg`), out, sizes: [px], colors: c, bg: '#000000', zopfli: false });
-        const bg = px === 180 ? '#000000' : null;
-        const file = px === 180 ? 'apple-touch-icon.png' : `icon-${px}.png`;
-        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {} });
+        const out = join(OUT, 'acc', `${m}-${c}-${label}`);
+        await build({ input: join(FIXTURES, `${m}.svg`), out, sizes: [192, 512], colors: c, bg: '#000000', zopfli: false });
+        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(out, file))), ref);
         cells.push(s.pct);
-        if (m !== 'gradient' && s.pct > worst.pct) worst = { pct: s.pct, at: `${m}@${px}`, colors: c };
+        if (m !== 'gradient' && s.pct > worst.pct) worst = { pct: s.pct, at: `${m}@${label}`, colors: c };
       }
-      rows.push([m, px, ...cells]);
+      rows.push([m, label, ...cells]);
     }
   }
   const head = `${pad('mark', 10)}${num('size', 5)}${cols.map((c) => num('c' + c, 9)).join('')}`;
@@ -100,11 +104,11 @@ sweeps.colors = async () => {
       if (m === 'gradient') continue;
       const dir = join(OUT, 'colors', `${m}-${c}`);
       const r = await build({ input: join(FIXTURES, `${m}.svg`), out: dir, sizes: [192, 512], colors: c, bg: '#000000' });
-      for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) bytes += r.bytes[f];
-      for (const [px, file, bg] of [[180, 'apple-touch-icon.png', '#000000'], [192, 'icon-192.png', null], [512, 'icon-512.png', null]]) {
-        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {} });
+      for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png']) bytes += r.bytes[f];
+      for (const [label, px, file, bg, fitted] of CHECKS) {
+        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(dir, file))), ref);
-        if (s.pct > worst) { worst = s.pct; at = `${m}@${px}`; }
+        if (s.pct > worst) { worst = s.pct; at = `${m}@${label}`; }
       }
     }
     out.push([c, bytes, worst, at]);
@@ -114,7 +118,7 @@ sweeps.colors = async () => {
     ...out.map(([c, b, w, at]) =>
       `${num(c, 7)}${num(b, 9)}${num(((b / base - 1) * 100).toFixed(1) + '%', 9)}${num(w.toFixed(3) + '%', 11)}  ${at}${w <= 1 ? '' : '   OVER THE BAR'}`)].join('\n');
   return { title: 'Palette size: bytes against accuracy',
-           note: `${MARKS.length - 1} marks (gradient excluded), 180 + 192 + 512 px, zopfli on. This is the sweep that sets the default.`,
+           note: `${MARKS.length - 1} marks (gradient excluded), 180 + 192 + 512 + maskable 512 px, zopfli on. This is the sweep that sets the default.`,
            text };
 };
 
@@ -234,9 +238,10 @@ sweeps.concurrency = async () => {
   await build({ input: join(FIXTURES, 'general.svg'), out: prep, sizes: [16], bg: null, zopfli: false });
   const iconSvg = join(prep, 'icon.svg');
 
-  // Exactly what a default build queues: the apple icon on its ground, the two --sizes
-  // entries, and the ICO payload.
-  const JOBS = [{ px: 180, bg: '#000000' }, { px: 192, bg: null }, { px: 512, bg: null }, { px: 32, bg: null }];
+  // The sizes a default build queues: the apple icon and the maskable icon on their ground, the
+  // two --sizes entries, and the ICO payload. Rendered from icon.svg for all five, since the
+  // timing question is about oxipng contention, not about what is drawn.
+  const JOBS = [{ px: 180, bg: '#000000' }, { px: 192, bg: null }, { px: 512, bg: null }, { px: 512, bg: '#000000' }, { px: 32, bg: null }];
 
   let seq = 0;
   const renderOne = async ({ px, bg }, zi) => {

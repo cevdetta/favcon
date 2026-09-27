@@ -18,6 +18,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { placeInSafeZone } from '../../bin/favcon.mjs';
 import { decode } from './png.mjs';
 import { resolveVars } from './resolve.mjs';
 
@@ -30,8 +31,14 @@ const CHANNEL_TOLERANCE = 8;      // out of 255
  * An unquantised render of the var-resolved SOURCE - not of favcon's icon.svg. Comparing
  * against the optimised SVG would make the gate blind to exactly what it exists to measure:
  * the error floatPrecision introduces before a rasteriser is ever involved.
+ *
+ * `fitted: true` is the reference for a masked icon (apple-touch-icon.png, icon-maskable-512.png):
+ * the same source placed in the safe zone at `px` by favcon's own placeInSafeZone, measured on
+ * the SOURCE's renders.
+ * The placement is shared on purpose - the gate is about pixels, not about re-deriving where
+ * the mark goes - and the masked-icon tests check the placement itself.
  */
-export async function reference(resvgPath, { source, px, bg, vars }) {
+export async function reference(resvgPath, { source, px, bg, vars, fitted = false }) {
   const dir = mkdtempSync(join(tmpdir(), 'favcon-ref.'));
   try {
     let svg = resolveVars(readFileSync(source, 'utf8'), vars);
@@ -46,6 +53,16 @@ export async function reference(resvgPath, { source, px, bg, vars }) {
       }
     }
     const src = join(dir, 'ref.svg'), out = join(dir, 'ref.png');
+    if (fitted) {
+      let n = 0;
+      const render = async (text, size) => {
+        const f = join(dir, `place-${n}.svg`), p = join(dir, `place-${n++}.png`);
+        writeFileSync(f, text);
+        await execFileAsync(resvgPath, ['--quiet', '-w', String(size), '-h', String(size), f, p]);
+        return readFileSync(p);
+      };
+      svg = (await placeInSafeZone(svg, render, px)).svg;
+    }
     writeFileSync(src, svg);
     await execFileAsync(resvgPath, ['--quiet', '-w', String(px), '-h', String(px),
                                     ...(bg ? ['--background', bg] : []), src, out]);

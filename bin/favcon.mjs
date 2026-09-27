@@ -6,8 +6,12 @@
 //   icon.svg              the same optimisation plus a structural animation strip.
 //                         Every raster below is rendered from this file.
 //   favicon.ico           32px PNG wrapped in a 22-byte ICO container
-//   apple-touch-icon.png  180px on an opaque ground
-//   icon-<size>.png       rendered natively at each size
+//   apple-touch-icon.png  180px on an opaque ground, the mark placed in the safe zone: iOS
+//   icon-<size>.png       transparent, rendered natively at each size: the manifest's "any"
+//                         icons, for Windows, Linux and Chrome's install check
+//   icon-maskable-512.png the mark placed in the safe zone on the same ground: the manifest's
+//                         "maskable" icon for Android, ChromeOS and macOS. Not written with
+//                         --bg none, since a maskable icon has to be opaque.
 //
 // Every step was chosen by measurement, not by habit. The tables are in docs/DECISIONS.md.
 // The short version, because these are the parts that look wrong until you know why:
@@ -33,6 +37,14 @@
 //     ratio and derives the second dimension, so a 128x64 mark rendered at -w 32 -h 32
 //     comes out 32x16. Making the box authoritative takes a square intrinsic size AND
 //     preserveAspectRatio="none"; see the viewBox block in build().
+//   * The masked icons are placed by measurement, not by a padding percentage. The safe zone
+//     is a circle of radius 40% of the icon, and what has to sit inside it is the mark's
+//     opaque extent - not its viewBox, because most marks carry a margin of their own. So
+//     icon.svg is rendered at each masked icon's own size and the farthest opaque pixel
+//     decides the scale. Then the scale is snapped DOWN, within 10%, to a size where the mark
+//     lands on whole pixels if one exists: at 512px a fitted scale of 0.6465 anti-aliased every
+//     edge of a pixel-grid mark and cost 571 B at 12 colours; snapped to 0.625 it is 3 colours
+//     and 290 B.
 //   * svgo 4.1.0 both crashes on and silently mangles the animated shape this tool's own
 //     input contract requires. Two workarounds, hoistKeyframes and the inlineStyles guard,
 //     each documented where it sits.
@@ -51,25 +63,34 @@ import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { inflateSync } from 'node:zlib';
 import { builtinPlugins, optimize } from 'svgo';
 
 const execFileAsync = promisify(execFile);
 
 const PROG = 'favcon';
 const ICO_SIZE = 32;           // what favicon.ico holds
-const APPLE_SIZE = 180;        // 60pt at @3x; no iPhone renders above @3x
-const DEFAULT_COLORS = 8;      // NOT the palette that meets the 1.0% accuracy bar - 16 is,
-                               // and 8 misses it on the marks with smooth colour ramps
-                               // (worst: 1.87% on the deliberately adversarial heavy.svg).
-                               // 8 ships anyway because it is ~18% smaller and a flat mark,
-                               // which is what a logo usually is, sits far inside the bar at
-                               // 8 - `flat.svg` scores 0.10%. Raising it is one flag and the
-                               // table in docs/BENCHMARKS.md says when to. Decision 19.
-const DEFAULT_SIZES = [192, 512];  // 192 rather than 256 so the manifest carries the token
-                               // Chrome's installability check matches - without a 192
-                               // entry a PWA install prompt may never appear. 512 is the
-                               // splash/store size. Anything else is one --sizes away.
-const DEFAULT_BG = '#000000';  // the ground under apple-touch-icon. iOS composites a
+const APPLE_SIZE = 180;        // 60pt at @3x, the largest size Apple documents for a web clip
+                               // icon; no iPhone renders above @3x.
+const MASKABLE_SIZE = 512;     // one maskable icon, the size web.dev's and Evil Martians' sets use.
+                               // Chrome takes a maskable icon by size and scales it down: to 83dp
+                               // at the device density on Android's launcher (332px at 4x), and
+                               // from the largest for splash screens and macOS's dock.
+const DEFAULT_COLORS = 8;      // NOT the palette that meets the 1.0% accuracy bar - 16 is. At 8
+                               // the small files miss it on anti-aliased marks: heavy.svg, the
+                               // deliberately adversarial fixture, scores 1.87% at 192px, and
+                               // flat and animated 1.1% on the 180px apple icon. Every 512px
+                               // file is inside. 8 ships because it is ~18% smaller and a mark
+                               // drawn on a pixel grid scores 0.00% at 8 on every file. Raising
+                               // it is one flag, and docs/BENCHMARKS.md says when. Decision 19.
+const DEFAULT_SIZES = [192, 512];  // the transparent "any" icons. web.dev's install criteria, Chrome's
+                               // own docs and MDN all require a 192 and a 512. Chromium 152's code
+                               // on desktop accepts one "any" icon of 144px or more (tested with
+                               // Page.getInstallabilityErrors), but that is one engine on one
+                               // platform, and the documentation is the contract every browser is
+                               // held to. SVG cannot fill the role: an SVG entry makes Android's
+                               // WebAPK install fail (crbug.com/40925759). Decision 11.
+const DEFAULT_BG = '#000000';  // the ground of the masked icons. iOS composites a
                                // transparent Home Screen icon onto black, so black is what
                                // the platform would have done anyway - the difference is
                                // that the alpha channel goes away and the file gets smaller.
@@ -77,6 +98,21 @@ const ZOPFLI_ITERATIONS = 120; // measured over the corpus: 79665 B at the defau
                                // 79454 at 60, 79386 at 120. The curve is flattening hard
                                // (-0.27%, then -0.09%) but bytes ship forever and build
                                // time does not, so the knee is taken on the byte side.
+const MASK_SAFE_RADIUS = 0.4;  // W3C Web App Manifest, "icon masks": the safe zone is a circle
+                               // centred on the icon with a radius of 2/5 of its size, the
+                               // part every platform mask (circle, squircle, rounded square,
+                               // teardrop) is guaranteed to show. iOS's own mask is a rounded
+                               // square with corners of about 22% of the tile, which contains
+                               // that circle whole, so the same placement serves
+                               // apple-touch-icon: unplaced, a mark with a 6% margin lost 12
+                               // corner pixels to it at 180 px. A square mark's corners reach furthest, so a
+                               // square that fills its viewBox lands at 0.4 * sqrt(2) = 56.6%
+                               // of the icon; a mark with its own margin lands proportionally
+                               // larger, which is why the extent is measured, not padded.
+const SNAP_WINDOW = 0.9;       // how far below the exact fit the mark may shrink to land on
+                               // whole pixels. A pixel-grid mark finds its size within a few
+                               // percent (the C mark: 320 of a possible 330px at 512, 112 of 116
+                               // at 180); a curved mark never does, and keeps the exact fit.
 
 const IS_WINDOWS = process.platform === 'win32';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -863,6 +899,155 @@ const normalise = (options) => {
   return o;
 };
 
+// ============================================================= the masked icon ==
+
+/**
+ * resvg's own PNG: 8-bit RGBA, not interlaced. Anything else reaching this is an internal
+ * error, so this is deliberately not a general PNG reader.
+ */
+const decodeRgba8 = (buf) => {
+  if (buf.length < 33 || buf.readUInt32BE(1) !== 0x504e470d) {
+    throw new FavconError('internal error: a placement render is not a PNG');
+  }
+  const idat = [];
+  let W = 0, H = 0, ok = false;
+  for (let i = 8; i + 8 <= buf.length;) {
+    const len = buf.readUInt32BE(i), type = buf.toString('latin1', i + 4, i + 8);
+    const data = buf.subarray(i + 8, i + 8 + len);
+    if (type === 'IHDR') { W = data.readUInt32BE(0); H = data.readUInt32BE(4); ok = data[8] === 8 && data[9] === 6 && data[12] === 0; }
+    else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    i += 12 + len;
+  }
+  if (!ok) throw new FavconError('internal error: a placement render is not 8-bit RGBA');
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = W * 4, rgba = Buffer.alloc(stride * H);
+  let prev = Buffer.alloc(stride), pos = 0;
+  for (let y = 0; y < H; y++) {
+    const f = raw[pos++], line = rgba.subarray(y * stride, (y + 1) * stride);
+    raw.copy(line, 0, pos, pos + stride);
+    pos += stride;
+    if (f) {
+      for (let i = 0; i < stride; i++) {
+        const a = i >= 4 ? line[i - 4] : 0, b = prev[i], c = i >= 4 ? prev[i - 4] : 0;
+        let v = line[i];
+        if (f === 1) v += a;
+        else if (f === 2) v += b;
+        else if (f === 3) v += (a + b) >> 1;
+        else if (f === 4) {
+          const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+        }
+        line[i] = v & 0xff;
+      }
+    }
+    prev = line;
+  }
+  return { W, H, rgba };
+};
+
+/**
+ * How far the mark reaches from the centre of its (square) icon, from a transparent render.
+ *
+ * `radius` is the distance of the farthest opaque pixel's OUTER corner, as a fraction of the
+ * icon width, so the whole pixel lands inside the zone rather than just its centre. `scale`
+ * is what icon.svg has to be multiplied by for that pixel to sit exactly on the safe circle:
+ * the mark fills the zone, in both directions - a mark drawn small is enlarged, because on a
+ * maskable icon its own margin means nothing (the platform's shape is the frame).
+ *
+ * A source that is opaque in all four corners is already full-bleed - a background drawn
+ * into the mark on purpose - and is used as it is: scaling it would shrink the author's own
+ * ground into a square sitting on --bg, which is never what a full-bleed mark wants.
+ */
+export const maskableFit = (png) => {
+  const { W, H, rgba } = decodeRgba8(png);
+  const alpha = (x, y) => rgba[(y * W + x) * 4 + 3];
+  const cx = W / 2, cy = H / 2;
+  let r2 = 0, any = false;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (alpha(x, y) === 0) continue;
+      any = true;
+      const dx = Math.max(Math.abs(x - cx), Math.abs(x + 1 - cx));
+      const dy = Math.max(Math.abs(y - cy), Math.abs(y + 1 - cy));
+      const d = dx * dx + dy * dy;
+      if (d > r2) r2 = d;
+    }
+  }
+  if (!any) throw new FavconError('icon.svg renders nothing, so there is no mark to fit into the safe zone');
+  const fullBleed = alpha(0, 0) > 0 && alpha(W - 1, 0) > 0 && alpha(0, H - 1) > 0 && alpha(W - 1, H - 1) > 0;
+  const radius = Math.sqrt(r2) / W;
+  return { radius, fullBleed, scale: fullBleed ? 1 : MASK_SAFE_RADIUS / radius };
+};
+
+/**
+ * icon.svg drawn as a `box`-pixel square, centred in a `canvas`-pixel one. Both are even, so
+ * the offset is a whole pixel and a mark that is crisp at `box` stays crisp in the canvas. The
+ * inner <svg> keeps its own viewBox; for a non-square source, the square width/height and
+ * preserveAspectRatio="none" that make its box authoritative are replaced by this placement,
+ * which is square too. The ground is not drawn: it is resvg's --background, so the wrapper
+ * adds no bytes to the PNG.
+ */
+export const nestForMask = (iconData, box, canvas) => {
+  const off = (canvas - box) / 2;
+  const inner = iconData
+    .replace(/^\s*<\?xml[^>]*\?>\s*/i, '')
+    .replace(/<svg\b([^>]*)>/i, (m, attrs) =>
+      `<svg${attrs.replace(/\s(?:x|y|width|height)\s*=\s*"[^"]*"/gi, '')} x="${off}" y="${off}" width="${box}" height="${box}">`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvas} ${canvas}">${inner}</svg>`;
+};
+
+const partialAlpha = (png) => {
+  const { rgba } = decodeRgba8(png);
+  let n = 0;
+  for (let i = 3; i < rgba.length; i += 4) if (rgba[i] !== 0 && rgba[i] !== 255) n++;
+  return n;
+};
+
+/**
+ * Where the mark goes in a masked icon of `canvas` px, decided on renders at that size, so the
+ * snap is to that icon's own pixels. `render(svgText, px)` must
+ * return a transparent PNG of `svgText` at px x px; favcon passes resvg, the test suite passes
+ * the same resvg for its reference, so the two can never place the mark differently.
+ *
+ * Two steps. The FIT scales the mark until its farthest opaque pixel sits on the safe circle
+ * (maskableFit). The SNAP then walks the box size down in whole even pixels, no further than
+ * SNAP_WINDOW, looking for the size where the mark renders with the fewest partly transparent
+ * pixels - which for a mark drawn on a pixel grid is a size with none at all. A smaller box is
+ * only taken when it at least halves them, so a curved mark, which is anti-aliased at every
+ * size, is not shrunk for nothing.
+ *
+ * Returns { svg, box, scale, snapped, radius, fullBleed }; `scale` is box / canvas.
+ */
+export const placeInSafeZone = async (iconData, render, canvas) => {
+  if (!Number.isInteger(canvas) || canvas < 2 || canvas % 2) {
+    throw new FavconError(`internal error: a masked icon's size must be an even pixel count, got ${canvas}`);
+  }
+  const fit = maskableFit(await render(iconData, canvas));
+  if (fit.fullBleed) {
+    return { svg: iconData, box: canvas, scale: 1, snapped: false, radius: fit.radius, fullBleed: true };
+  }
+  const even = (n) => n - (n % 2);
+  // Not capped at the canvas: a mark drawn small gets a box wider than the icon, and only its
+  // own transparent margin falls outside - the fit has already put every opaque pixel inside.
+  const exact = even(Math.floor(fit.scale * canvas));
+  const baseline = partialAlpha(await render(iconData, exact));
+  let box = exact;
+  if (baseline > 0) {
+    let best = { box: exact, n: baseline };
+    for (let b = exact - 2; b >= Math.ceil(exact * SNAP_WINDOW); b -= 2) {
+      const n = partialAlpha(await render(iconData, b));
+      if (n < best.n) best = { box: b, n };
+      if (n === 0) break;                 // the largest crisp size: nothing below can beat it
+    }
+    if (best.n * 2 <= baseline) box = best.box;
+  }
+  return {
+    svg: nestForMask(iconData, box, canvas), box, scale: box / canvas,
+    snapped: box !== exact, radius: fit.radius, fullBleed: false,
+  };
+};
+
 // =================================================================== build() ==
 
 /**
@@ -880,7 +1065,9 @@ export const linkTags = (base = '/', manifest = false) =>
 
 /**
  * Build the set. Throws FavconError with a finished message; never exits, never writes to
- * stdout. Returns { files, bytes, animated, links }.
+ * stdout. Returns { files, bytes, animated, fit, links }, where `fit` is { apple, maskable },
+ * each { box, canvas, scale, snapped, radius, fullBleed } - how the mark was placed in that
+ * icon - and `maskable` is null under --bg none.
  */
 export async function build(options = {}) {
   const o = normalise(options);
@@ -980,6 +1167,26 @@ export async function build(options = {}) {
     }
     writeFileSync(iconSvg, iconData);
 
+    // ---- 1b. the masked icons' placement: measured on renders, never assumed ----
+    // A handful of transparent resvg renders at each icon's own size, milliseconds each.
+    let renders = 0;
+    const renderAt = async (svg, px) => {
+      const n = renders++, src = join(tmp, `place-${n}.svg`), png = join(tmp, `place-${n}.png`);
+      writeFileSync(src, svg);
+      await run('resvg', ['--quiet', '-w', String(px), '-h', String(px), src, png]);
+      return readFileSync(png);
+    };
+    const place = async (canvas) => {
+      const { svg, ...where } = await placeInSafeZone(iconData, renderAt, canvas);
+      const file = join(tmp, `masked-${canvas}.svg`);
+      writeFileSync(file, svg);
+      return { file, fit: { ...where, canvas } };
+    };
+    const apple = await place(APPLE_SIZE);
+    // A maskable icon has to be opaque (the spec lets a platform composite a transparent one onto
+    // any colour it likes), so --bg none writes no maskable icon at all rather than a wrong one.
+    const maskable = o.bg === null ? null : await place(MASKABLE_SIZE);
+    const fit = { apple: apple.fit, maskable: maskable?.fit ?? null };
 
     // ---- 2. icon.svg -> a PNG at size N ----
     // Three candidates, compared by size:
@@ -991,10 +1198,10 @@ export async function build(options = {}) {
     //     achieves: at --colors 32 the quantised 16px file is 4% LARGER than doing nothing.
     // Only the winner gets the zopfli pass - running it on every candidate costs 3x for
     // exactly the same bytes, because the losers are discarded anyway.
-    const renderPng = async ({ px, bg, tag, dests }) => {
+    const renderPng = async ({ px, bg, tag, dests, svg }) => {
       const raw = join(tmp, `raw-${tag}.png`);
       await run('resvg', ['--quiet', '-w', String(px), '-h', String(px),
-                          ...(bg ? ['--background', bg] : []), iconSvg, raw]);
+                          ...(bg ? ['--background', bg] : []), svg, raw]);
 
       const cands = [];
       for (const [name, dither] of [['nofs', '--nofs'], ['floyd', '--floyd=1']]) {
@@ -1039,18 +1246,20 @@ export async function build(options = {}) {
       for (const d of dests) copyFileSync(final, d);
     };
 
-    // One render per distinct (size, background). --sizes 32 would otherwise rasterise and
-    // zopfli the same image twice, once for icon-32.png and once for the ICO payload.
+    // One render per distinct (source, size, background). --sizes 32 would otherwise
+    // rasterise and zopfli the same image twice, once for icon-32.png and once for the ICO
+    // payload. The masked icons have their own sources, so they never collide with icon-512.png.
     const icoPng = join(tmp, `ico-${ICO_SIZE}.png`);
     const queue = new Map();
-    const want = (px, bg, dest) => {
-      const key = `${px}\0${bg ?? ''}`;
-      const job = queue.get(key) ?? { px, bg, tag: `${px}-${queue.size}`, dests: [] };
+    const want = (px, bg, dest, svg = iconSvg) => {
+      const key = `${svg}\0${px}\0${bg ?? ''}`;
+      const job = queue.get(key) ?? { px, bg, svg, tag: `${px}-${queue.size}`, dests: [] };
       job.dests.push(dest);
       queue.set(key, job);
     };
-    want(APPLE_SIZE, o.bg, join(stage, 'apple-touch-icon.png'));
+    want(APPLE_SIZE, o.bg, join(stage, 'apple-touch-icon.png'), apple.file);
     for (const s of o.sizes) want(s, null, join(stage, `icon-${s}.png`));
+    if (maskable) want(MASKABLE_SIZE, o.bg, join(stage, `icon-maskable-${MASKABLE_SIZE}.png`), maskable.file);
     want(ICO_SIZE, null, icoPng);
 
     // Serially: see the note at the top of the file. oxipng saturates the machine on one
@@ -1062,7 +1271,8 @@ export async function build(options = {}) {
 
     // ---- 4. optional outputs ----
     const files = ['logo.svg', 'icon.svg', 'favicon.ico', 'apple-touch-icon.png',
-                   ...o.sizes.map((s) => `icon-${s}.png`)];
+                   ...o.sizes.map((s) => `icon-${s}.png`),
+                   ...(maskable ? [`icon-maskable-${MASKABLE_SIZE}.png`] : [])];
 
     if (o.manifest) {
       // Icons only from the CLI, which cannot know the app's name. The Astro integration
@@ -1073,8 +1283,17 @@ export async function build(options = {}) {
         ? Object.entries(o.manifest).filter(([k]) => k !== 'icons')
           .map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v)},\n`).join('')
         : '';
-      const entries = o.sizes.map((s) =>
-        `    { "src": "${base}icon-${s}.png", "sizes": "${s}x${s}", "type": "image/png" }`);
+      // "any" and "maskable" are different files on purpose: one icon declared for both is
+      // either padded (and sits as a small tile on a desktop that does not mask) or not (and
+      // is cropped under a mask), and web.dev's guidance is not to combine them. icon.svg is
+      // never listed: an SVG entry breaks Android's WebAPK install (crbug.com/40925759).
+      const entry = (s, name, purpose) =>
+        `    { "src": "${base}${name}", "sizes": "${s}x${s}", "type": "image/png"` +
+        `${purpose ? `, "purpose": "${purpose}"` : ''} }`;
+      const entries = [
+        ...o.sizes.map((s) => entry(s, `icon-${s}.png`, null)),
+        ...(maskable ? [entry(MASKABLE_SIZE, `icon-maskable-${MASKABLE_SIZE}.png`, 'maskable')] : []),
+      ];
       writeFileSync(join(stage, 'site.webmanifest'),
         `{\n${extra}  "icons": [\n${entries.join(',\n')}\n  ]\n}\n`);
       files.push('site.webmanifest');
@@ -1099,7 +1318,7 @@ export async function build(options = {}) {
     const bytes = {};
     for (const f of files) bytes[f] = statSync(join(outDir, f)).size;
 
-    return { files, bytes, animated, dir: outDir, links: linkTags(base, Boolean(o.manifest)) };
+    return { files, bytes, animated, fit, dir: outDir, links: linkTags(base, Boolean(o.manifest)) };
   } catch (e) {
     if (e instanceof FavconError) throw e;
     throw new FavconError(e.tool ? `${e.tool} failed: ${e.message}` : e.message);
@@ -1125,10 +1344,12 @@ Options:
   -o, --out DIR     Output directory (default: current)
       --colors N    Palette size, 2-256 (default: 8). Fine for a flat mark; raise it to 16
                     if yours has gradients or soft shading - see docs/BENCHMARKS.md.
-      --sizes LIST  Standalone PNG sizes (default: "192 512"). 192 is the size
-                    Chrome's PWA installability check looks for by name.
-      --bg COLOR    Opaque ground for apple-touch-icon (default: #000000). "none" keeps it
-                    transparent - iOS then composites the icon onto black.
+      --sizes LIST  Transparent PNG sizes, the manifest's "any" icons (default: "192 512",
+                    the pair Chrome's install criteria document).
+      --bg COLOR    Ground of the masked icons, apple-touch-icon.png (180px) and
+                    icon-maskable-512.png (default: #000000). The mark sits inside the safe
+                    zone on it, measured and snapped to whole pixels. "none" keeps
+                    apple-touch-icon.png transparent and writes no maskable icon.
       --var N=V     Set a CSS custom property, e.g. --var c-primary=#0E7C68. Repeatable.
                     Without it, var(--x, fallback) resolves to its fallback, the way a
                     browser resolves an undefined property.
@@ -1144,7 +1365,7 @@ Options:
 Long options also take --opt=value. Use -- to end options.
 
 Outputs: logo.svg  icon.svg  favicon.ico  apple-touch-icon.png  icon-<size>.png
-         [site.webmanifest]`;
+         icon-maskable-512.png  [site.webmanifest]`;
 
 const readVersion = () => {
   try {
@@ -1240,8 +1461,13 @@ export async function cli(argv) {
 
   if (!opts.quiet) {
     for (const f of result.files) {
-      const note = f !== 'logo.svg' ? ''
-        : result.animated ? '  animated' : '  static (no animation in the source)';
+      let note = '';
+      if (f === 'logo.svg') note = result.animated ? '  animated' : '  static (no animation in the source)';
+      else if (f === 'apple-touch-icon.png' || f.startsWith('icon-maskable-')) {
+        const where = f === 'apple-touch-icon.png' ? result.fit.apple : result.fit.maskable;
+        note = where.fullBleed ? '  full-bleed source, used as it is'
+          : `  mark at ${where.box}px of ${where.canvas} in the safe zone${where.snapped ? ', on whole pixels' : ''}`;
+      }
       process.stdout.write(`${f.padEnd(22)} ${String(result.bytes[f]).padStart(6)} B${note}\n`);
     }
   }
