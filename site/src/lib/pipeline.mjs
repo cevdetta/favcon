@@ -7,8 +7,8 @@
 //     exports the same `optimize` and `builtinPlugins`, so icon.svg and logo.svg come out
 //     byte-identical to the CLI's.
 //   * squareIconSvg, so a non-square mark is boxed the same way
-//   * placeInSafeZone, so the mark lands in the same place in the masked icons - including the
-//     snap to whole pixels
+//   * placeInSafeZone, so the mark lands in the same place in the padded icons - including the
+//     snap to whole pixels, or the caller's explicit padding
 //   * icoWrap, manifestJson, linkTags
 //
 // What is not, and cannot be: resvg, pngquant and oxipng are binaries. Their WASM substitutes
@@ -26,7 +26,7 @@ import { builtinPlugins, optimize } from 'svgo/browser';
 
 import {
   APPLE_SIZE, createSvgStage, DEFAULT_BG, DEFAULT_COLORS, DEFAULT_SIZES, FavconError, ICO_SIZE,
-  icoWrap, linkTags, MASKABLE_SIZE, manifestJson, placeInSafeZone, squareIconSvg,
+  icoWrap, linkTags, manifestJson, placeInSafeZone, squareIconSvg,
 } from '../../../lib/core.mjs';
 import { zip } from './zip.mjs';
 
@@ -124,53 +124,42 @@ export async function buildInBrowser(svgText, options = {}) {
     { name: 'icon.svg', bytes: new TextEncoder().encode(iconData) },
   ];
 
-  // The masked icons, placed by the shared maths so the mark sits where the CLI would put it.
+  // The padded icons, placed by the shared maths so the mark sits where the CLI would put it.
+  const padding = options.padding ?? 'auto';
   const place = async (canvas) => {
-    const { svg, ...where } = await placeInSafeZone(iconData, renderRgba, canvas);
+    const { svg, ...where } = await placeInSafeZone(iconData, renderRgba, canvas, padding);
     return { svg, fit: { ...where, canvas } };
   };
+  const padded = bg !== null;
+
   const apple = await place(APPLE_SIZE);
-  files.push({
-    name: 'apple-touch-icon.png',
-    bytes: await encodeRaster(await render(apple.svg, APPLE_SIZE, bg ?? undefined), colors),
-  });
+  files.push({ name: 'apple-touch-icon.png', bytes: await encodeRaster(await render(apple.svg, APPLE_SIZE, bg ?? undefined), colors) });
 
-  let maskable = null;
-  if (bg !== null) {
-    maskable = await place(MASKABLE_SIZE);
-    files.push({
-      name: `icon-maskable-${MASKABLE_SIZE}.png`,
-      bytes: await encodeRaster(await render(maskable.svg, MASKABLE_SIZE, bg), colors),
-    });
+  const icons = {};
+  for (const s of sizes) {
+    const placed = padded ? await place(s) : null;
+    icons[s] = placed?.fit ?? null;
+    files.push({ name: `icon-${s}.png`, bytes: await encodeRaster(await render(placed?.svg ?? iconData, s, bg ?? undefined), colors) });
   }
-
-  // The transparent "any" icons, and the ICO payload. One render per distinct size, so asking
-  // for 32 gives icon-32.png and the ICO the same bytes - true by construction, as in the CLI.
-  const rasters = new Map();
-  const at = async (px) => {
-    if (!rasters.has(px)) rasters.set(px, await encodeRaster(await render(iconData, px, null), colors));
-    return rasters.get(px);
-  };
-  for (const s of sizes) files.push({ name: `icon-${s}.png`, bytes: await at(s) });
-  files.push({ name: 'favicon.ico', bytes: icoWrap(await at(ICO_SIZE), ICO_SIZE) });
+  // The ICO payload is never padded, so it is its own render even when a size matches.
+  files.push({ name: 'favicon.ico', bytes: icoWrap(await encodeRaster(await render(iconData, ICO_SIZE, null), colors), ICO_SIZE) });
 
   if (wantManifest) {
     files.push({
       name: 'site.webmanifest',
-      bytes: new TextEncoder().encode(manifestJson({ sizes, maskable: Boolean(maskable) })),
+      bytes: new TextEncoder().encode(manifestJson({ sizes, purpose: padded ? 'any maskable' : null })),
     });
   }
 
   // Emitted in the CLI's order, so the two summaries read the same way.
   const order = ['logo.svg', 'icon.svg', 'favicon.ico', 'apple-touch-icon.png',
-                 ...sizes.map((s) => `icon-${s}.png`),
-                 `icon-maskable-${MASKABLE_SIZE}.png`, 'site.webmanifest'];
+                 ...sizes.map((s) => `icon-${s}.png`), 'site.webmanifest'];
   files.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
 
   return {
     files,
     animated,
-    fit: { apple: apple.fit, maskable: maskable?.fit ?? null },
+    fit: { apple: apple.fit, icons },
     links: linkTags('/', wantManifest),
     archive: () => zip(files),
   };

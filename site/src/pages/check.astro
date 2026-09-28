@@ -34,8 +34,8 @@
       lines.push(`mark ${name} ms=${Math.round(performance.now() - t0)} animated=${built.animated}`);
       for (const f of built.files) lines.push(`  file ${name} ${f.name} ${f.bytes.length}`);
       lines.push(`  fit ${name} apple=${built.fit.apple.box}/${built.fit.apple.canvas}` +
-                 ` maskable=${built.fit.maskable.box}/${built.fit.maskable.canvas}` +
-                 ` snapped=${built.fit.maskable.snapped}`);
+                 ` icon512=${built.fit.icons[512].box}/${built.fit.icons[512].canvas}` +
+                 ` snapped=${built.fit.icons[512].snapped}`);
       // A byte count alone would not notice a pipeline emitting plausible-looking rubbish.
       for (const f of built.files) {
         if (f.name.endsWith('.png') && !sig.every((b, i) => f.bytes[i] === b)) throw new Error(`${name}/${f.name} is not a PNG`);
@@ -44,6 +44,14 @@
       const ico = built.files.find((f) => f.name === 'favicon.ico');
       if (!ico || ![0, 0, 1, 0].every((b, i) => ico.bytes[i] === b)) throw new Error(`${name}: bad ICO header`);
       if (built.archive().length < 100) throw new Error(`${name}: the archive is empty`);
+      if (built.files.some((f) => f.name.startsWith('icon-maskable'))) {
+        throw new Error(`${name}: the browser still writes a separate maskable icon`);
+      }
+      const manifest = JSON.parse(new TextDecoder().decode(
+        built.files.find((f) => f.name === 'site.webmanifest').bytes));
+      if (manifest.icons[0].purpose !== 'any maskable') {
+        throw new Error(`${name}: manifest purpose is ${manifest.icons[0].purpose}`);
+      }
     }
     lines.push('OK');
   } catch (e) {

@@ -7,8 +7,7 @@ const outputs = [
   ['icon.svg', 'The same optimisation plus a structural animation strip. The browser favicon, and what every raster below is rendered from.'],
   ['favicon.ico', 'One 32x32 entry, a raw PNG in a 22-byte container.'],
   ['apple-touch-icon.png', '180x180 on the chosen ground, the mark placed in the safe zone.'],
-  ['icon-192.png, icon-512.png', 'Transparent. The manifest\'s "any" icons.'],
-  ['icon-maskable-512.png', '512x512 on the ground, placed the same way. The manifest\'s "maskable" icon.'],
+  ['icon-192.png, icon-512.png', 'On the same ground, placed the same way. The manifest\'s "any maskable" icons.'],
   ['site.webmanifest', 'Icons only - merge your own name and theme_color.'],
 ];
 ---
@@ -46,11 +45,15 @@ const outputs = [
       </label>
       <label>Sizes
         <input type="text" id="sizes" value="192 512" />
-        <span class="quiet">The transparent “any” icons.</span>
+        <span class="quiet">The padded “any maskable” icons.</span>
       </label>
       <label>Ground
         <input type="text" id="bg" value="#000000" />
-        <span class="quiet">Under the masked icons. <code>none</code> keeps alpha and writes no maskable icon.</span>
+        <span class="quiet">Under the padded icons. <code>none</code> keeps alpha and declares them <code>any</code> only.</span>
+      </label>
+      <label>Padding
+        <input type="text" id="padding" value="auto" />
+        <span class="quiet">Percent per side, or <code>auto</code> to measure the mark.</span>
       </label>
       <label class="check">
         <input type="checkbox" id="animation" checked />
@@ -66,7 +69,7 @@ const outputs = [
     <div class="previews">
       <figure><div class="swatch light"><img id="p-light" alt="the mark on white" /></div><figcaption>on white</figcaption></figure>
       <figure><div class="swatch dark"><img id="p-dark" alt="the mark on dark" /></div><figcaption>on dark</figcaption></figure>
-      <figure><div class="swatch"><img id="p-mask" class="masked" alt="the maskable icon under a circular mask" /></div><figcaption>masked</figcaption></figure>
+      <figure><div class="swatch"><img id="p-mask" class="masked" alt="a padded icon under a circular mask" /></div><figcaption>masked</figcaption></figure>
     </div>
     <table id="sizes-table"><thead><tr><th>file</th><th>bytes</th><th></th></tr></thead><tbody></tbody></table>
     <p id="fit" class="quiet"></p>
@@ -173,6 +176,7 @@ const outputs = [
         colors: el('colors').value,
         sizes: el('sizes').value.trim().split(/[\s,]+/).filter(Boolean).map(Number),
         bg: el('bg').value.trim(),
+        padding: el('padding').value.trim() === 'auto' ? 'auto' : Number(el('padding').value),
         animation: el('animation').checked,
       });
       const ms = Math.round(performance.now() - t0);
@@ -201,15 +205,16 @@ const outputs = [
       const iconUrl = url(icon.bytes, 'image/svg+xml');
       el('p-light').src = iconUrl;
       el('p-dark').src = iconUrl;
-      const mask = byName['icon-maskable-512.png'];
-      el('p-mask').src = mask ? url(mask.bytes, 'image/png') : iconUrl;
-
       const f = built.fit;
-      el('fit').textContent = f.maskable
-        ? `Mark placed at ${f.maskable.box}px of ${f.maskable.canvas} in the safe zone` +
-          `${f.maskable.snapped ? ', snapped to whole pixels' : ''}` +
-          `${f.maskable.fullBleed ? ' (full-bleed source, used as drawn)' : ''}.`
-        : 'No maskable icon: the ground is transparent.';
+      const biggest = Object.keys(f.icons).map(Number).sort((a, b) => b - a)[0];
+      const show = f.icons[biggest];
+      // The masked preview shows the largest padded icon: that is what a launcher masks.
+      el('p-mask').src = show ? url(byName[`icon-${biggest}.png`].bytes, 'image/png') : iconUrl;
+      el('fit').textContent = show
+        ? `Mark placed at ${show.box}px of ${show.canvas} in the safe zone` +
+          `${show.snapped ? ', snapped to whole pixels' : ''}` +
+          `${show.fullBleed ? ' (full-bleed source, used as drawn)' : ''}.`
+        : 'No padded icon: the ground is transparent.';
       el('links').textContent = built.links.trim();
       result.hidden = false;
       say(`Done in ${ms} ms. ${built.animated ? 'logo.svg keeps its animation.' : 'The source is static.'}`, 'good');
