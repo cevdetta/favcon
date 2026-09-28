@@ -331,6 +331,7 @@ const normalise = (options) => {
     // the range check while making the "clear message" contract a lie.
     colors: DEFAULT_COLORS,
     sizes: [],
+    padding: 'auto',
     bg: options.bg === undefined ? DEFAULT_BG : options.bg,
     vars: normaliseVars(options.vars),
     animation: options.animation !== false,
@@ -344,6 +345,19 @@ const normalise = (options) => {
   if (!/^\d+$/.test(String(rawColors))) throw new FavconError(`--colors must be an integer 2-256, got '${rawColors}'`);
   o.colors = Number(rawColors);
   if (o.colors < 2 || o.colors > 256) throw new FavconError('--colors must be an integer 2-256');
+
+  // 'auto' or a percentage per side. Capped at 45 because 50 leaves no mark at all, and a
+  // value that produces an empty icon should be a message rather than a blank PNG.
+  const rawPadding = options.padding ?? 'auto';
+  if (rawPadding === 'auto') {
+    o.padding = 'auto';
+  } else {
+    if (!/^\d+(\.\d+)?$/.test(String(rawPadding))) {
+      throw new FavconError(`--padding must be 'auto' or a percentage 0-45, got '${rawPadding}'`);
+    }
+    o.padding = Number(rawPadding);
+    if (o.padding < 0 || o.padding > 45) throw new FavconError("--padding must be 'auto' or a percentage 0-45");
+  }
 
   const rawSizes = options.sizes ?? DEFAULT_SIZES;
   const list = Array.isArray(rawSizes) ? rawSizes : String(rawSizes).trim().split(/[\s,]+/).filter(Boolean);
@@ -419,7 +433,7 @@ const decodeRgba8 = (buf) => {
 /**
  * Build the set. Throws FavconError with a finished message; never exits, never writes to
  * stdout. Returns { files, bytes, animated, fit, links }, where `fit` is { apple, maskable },
- * each { box, canvas, scale, snapped, radius, fullBleed } - how the mark was placed in that
+ * each { box, canvas, scale, snapped, radius, fullBleed, padding } - how the mark was placed in that
  * icon - and `maskable` is null under --bg none.
  */
 export async function build(options = {}) {
@@ -513,7 +527,7 @@ export async function build(options = {}) {
       return decodeRgba8(readFileSync(png));
     };
     const place = async (canvas) => {
-      const { svg, ...where } = await placeInSafeZone(iconData, renderAt, canvas);
+      const { svg, ...where } = await placeInSafeZone(iconData, renderAt, canvas, o.padding);
       const file = join(tmp, `masked-${canvas}.svg`);
       writeFileSync(file, svg);
       return { file, fit: { ...where, canvas } };
@@ -671,6 +685,10 @@ Options:
                     icon-maskable-512.png (default: #000000). The mark sits inside the safe
                     zone on it, measured and snapped to whole pixels. "none" keeps
                     apple-touch-icon.png transparent and writes no maskable icon.
+      --padding P   How much of each masked icon is margin, as a percentage per side
+                    (default: auto). \`auto\` measures the mark's own extent and snaps it to
+                    whole pixels, which is smaller and sharper than any fixed number - see
+                    docs/DECISIONS.md decision 20. Give a number to override it.
       --var N=V     Set a CSS custom property, e.g. --var c-primary=#0E7C68. Repeatable.
                     Without it, var(--x, fallback) resolves to its fallback, the way a
                     browser resolves an undefined property.
@@ -698,6 +716,7 @@ export async function cli(argv) {
   const opts = {
     out: '.', colors: DEFAULT_COLORS, sizes: null, bg: DEFAULT_BG, vars: new Map(),
     animation: true, manifest: false, html: false, quiet: false, bgGiven: false,
+    padding: 'auto',
   };
   let input = null;
 
@@ -724,6 +743,7 @@ export async function cli(argv) {
       case '--colors':           opts.colors = need(); break;
       case '--sizes':            opts.sizes = need(); break;
       case '--bg':               opts.bg = need(); opts.bgGiven = true; break;
+      case '--padding':          opts.padding = need(); break;
       case '--var': {
         const kv = need();
         const eq = kv.indexOf('=');
@@ -774,7 +794,7 @@ export async function cli(argv) {
     result = await build({
       input, out: opts.out, colors: opts.colors, sizes: opts.sizes ?? DEFAULT_SIZES,
       bg: opts.bg, vars: opts.vars, animation: opts.animation, manifest: opts.manifest,
-      onWarn: warn,
+      padding: opts.padding, onWarn: warn,
     });
   } catch (e) {
     die(e instanceof FavconError ? e.message : (e.tool ? `${e.tool} failed: ${e.message}` : e.message));

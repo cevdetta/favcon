@@ -456,6 +456,23 @@ describe('the masked icons', { skip: skipNoTools }, () => {
     }
   });
 
+  it('--padding places the mark at exactly that fraction', async () => {
+    // An explicit percentage must be obeyed literally: box = canvas * (1 - 2p), rounded down
+    // to an even pixel so the offset stays whole. 20% of 512 leaves 60% = 307 -> 306.
+    const out = freshDir();
+    const r = await build({ input: fixture('tiles.svg'), out, sizes: [512], padding: 20, zopfli: false });
+    assert.equal(r.fit.apple.padding, 20);
+    assert.equal(r.fit.apple.box, 108);          // 180 * 0.6 = 108, already even
+    assert.equal(r.fit.apple.snapped, false, 'an explicit padding must not be snapped away');
+  });
+
+  it('--padding auto still measures and snaps', async () => {
+    const out = freshDir();
+    const r = await build({ input: fixture('tiles.svg'), out, sizes: [512], padding: 'auto', zopfli: false });
+    assert.equal(r.fit.apple.box, 112, 'tiles is a pixel-grid mark and snaps to 112 of 180');
+    assert.equal(r.fit.apple.snapped, true);
+  });
+
   it('are inside the accuracy bar against references placed the same way', async () => {
     const { out } = await MASKED('general', { colors: 16 });
     const resvg = await toolPath('resvg');
