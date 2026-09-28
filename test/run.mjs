@@ -629,6 +629,9 @@ describe('bad input fails clearly', () => {
     [['--colors', '257', 'X'], /--colors must be an integer 2-256/],
     [['--colors', '0x10', 'X'], /--colors must be an integer 2-256, got '0x10'/],
     [['--sizes', 'big', 'X'], /--sizes takes pixel sizes, got 'big'/],
+    [['--sizes', '33', 'X'], /--sizes takes even pixel sizes, got '33'/],
+    [['--padding', 'foo', 'X'], /--padding must be 'auto' or a percentage 0-45, got 'foo'/],
+    [['--padding', '46', 'X'], /--padding must be 'auto' or a percentage 0-45/],
     [['--frobnicate', 'X'], /unknown option: --frobnicate/],
     [['--var', 'novalue', 'X'], /--var takes name=value/],
   ];
@@ -923,6 +926,16 @@ describe('option validation, without touching a binary', () => {
   it('rejects a size that is not a pixel count', async () => {
     await bad({ sizes: ['big'] }, /--sizes takes pixel sizes, got 'big'/);
     await bad({ sizes: [] }, /--sizes is empty/);
+  });
+
+  it('rejects an odd size, which the safe zone cannot place on whole pixels', async () => {
+    await bad({ sizes: [33] }, /--sizes takes even pixel sizes, got '33'/);
+  });
+
+  it('rejects a padding that is not auto or a percentage 0-45', async () => {
+    await bad({ padding: 'foo' }, /--padding must be 'auto' or a percentage 0-45, got 'foo'/);
+    await bad({ padding: 46 }, /--padding must be 'auto' or a percentage 0-45/);
+    await bad({ padding: -5 }, /--padding must be 'auto' or a percentage 0-45, got '-5'/);
   });
 
   it('rejects a var name that is not a custom property', async () => {

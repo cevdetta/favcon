@@ -106,6 +106,25 @@ export async function buildInBrowser(svgText, options = {}) {
   const vars = options.vars ?? {};
   const wantManifest = options.manifest !== false;
 
+  // The same messages as the CLI's normalise(): invalid input must fail here, fast, rather
+  // than as an "internal error" from the placement maths or a silently near-empty icon.
+  const rawPadding = options.padding ?? 'auto';
+  let padding;
+  if (rawPadding === 'auto') {
+    padding = 'auto';
+  } else {
+    if (!/^\d+(\.\d+)?$/.test(String(rawPadding))) {
+      throw new FavconError(`--padding must be 'auto' or a percentage 0-45, got '${rawPadding}'`);
+    }
+    padding = Number(rawPadding);
+    if (padding < 0 || padding > 45) throw new FavconError("--padding must be 'auto' or a percentage 0-45");
+  }
+  for (const s of sizes) {
+    // Every size is placed in the safe zone with whole-pixel offsets, which needs an even
+    // canvas — same rule as the CLI.
+    if (!Number.isInteger(s) || s % 2 !== 0) throw new FavconError(`--sizes takes even pixel sizes, got '${s}'`);
+  }
+
   if (!/<svg[\s>]/i.test(svgText)) {
     throw new FavconError('not an SVG (no <svg> element found)');
   }
@@ -125,7 +144,6 @@ export async function buildInBrowser(svgText, options = {}) {
   ];
 
   // The padded icons, placed by the shared maths so the mark sits where the CLI would put it.
-  const padding = options.padding ?? 'auto';
   const place = async (canvas) => {
     const { svg, ...where } = await placeInSafeZone(iconData, renderRgba, canvas, padding);
     return { svg, fit: { ...where, canvas } };

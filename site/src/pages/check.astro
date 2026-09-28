@@ -53,6 +53,26 @@
         throw new Error(`${name}: manifest purpose is ${manifest.icons[0].purpose}`);
       }
     }
+    // Invalid options must fail with the same messages as the CLI, not with silently
+    // near-empty icons or an "internal error" from the placement maths.
+    for (const bad of ['foo', 90, -5]) {
+      let threw = null;
+      try {
+        await buildInBrowser(tiles, { colors: 8, sizes: [192], bg: '#000000', padding: bad });
+      } catch (e) { threw = e?.message ?? String(e); }
+      if (!threw || !/--padding must be 'auto' or a percentage 0-45/.test(threw)) {
+        throw new Error(`padding ${JSON.stringify(bad)} was accepted (${threw ?? 'no error'})`);
+      }
+    }
+    {
+      let threw = null;
+      try {
+        await buildInBrowser(tiles, { colors: 8, sizes: [33], bg: '#000000' });
+      } catch (e) { threw = e?.message ?? String(e); }
+      if (!threw || !/--sizes takes even pixel sizes/.test(threw)) {
+        throw new Error(`sizes [33] was accepted (${threw ?? 'no error'})`);
+      }
+    }
     lines.push('OK');
   } catch (e) {
     lines.push(`FAIL ${e?.message ?? e}`);

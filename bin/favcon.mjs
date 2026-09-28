@@ -363,6 +363,10 @@ const normalise = (options) => {
     if (!/^\d+$/.test(String(s))) throw new FavconError(`--sizes takes pixel sizes, got '${s}'`);
     const n = Number(s);
     if (n < 1 || n > 8192) throw new FavconError(`--sizes takes pixel sizes 1-8192, got '${s}'`);
+    // Every size is placed in the safe zone, where the box is rounded down to an even pixel
+    // so the offset stays whole. An odd canvas cannot be placed that way, so it is a message
+    // here rather than an "internal error" from the placement maths later.
+    if (n % 2 !== 0) throw new FavconError(`--sizes takes even pixel sizes, got '${s}'`);
     if (!o.sizes.includes(n)) o.sizes.push(n);         // 032 and 32 are the same render
   }
   if (o.sizes.length === 0) throw new FavconError('--sizes is empty');
