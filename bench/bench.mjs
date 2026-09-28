@@ -30,11 +30,11 @@ const OUT = join(HERE, 'out');
 // Every fixture that builds. The negative ones do not, by design.
 const MARKS = ['general', 'flat', 'second', 'mask', 'heavy', 'animated', 'tiles', 'wide', 'gradient', 'smil'];
 // [label, px, file, ground, placed]: every raster a default build writes except the ICO.
+// The whole set is padded into the safe zone now, so every row is placed on the ground.
 const CHECKS = [
   ['180m', 180, 'apple-touch-icon.png', '#000000', true],
-  ['192', 192, 'icon-192.png', null, false],
-  ['512', 512, 'icon-512.png', null, false],
-  ['512m', 512, 'icon-maskable-512.png', '#000000', true],
+  ['192m', 192, 'icon-192.png', '#000000', true],
+  ['512m', 512, 'icon-512.png', '#000000', true],
 ];
 
 const size = (p) => statSync(p).size;
@@ -104,7 +104,7 @@ sweeps.colors = async () => {
       if (m === 'gradient') continue;
       const dir = join(OUT, 'colors', `${m}-${c}`);
       const r = await build({ input: join(FIXTURES, `${m}.svg`), out: dir, sizes: [192, 512], colors: c, bg: '#000000' });
-      for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png']) bytes += r.bytes[f];
+      for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) bytes += r.bytes[f];
       for (const [label, px, file, bg, fitted] of CHECKS) {
         const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(dir, file))), ref);
@@ -118,7 +118,7 @@ sweeps.colors = async () => {
     ...out.map(([c, b, w, at]) =>
       `${num(c, 7)}${num(b, 9)}${num(((b / base - 1) * 100).toFixed(1) + '%', 9)}${num(w.toFixed(3) + '%', 11)}  ${at}${w <= 1 ? '' : '   OVER THE BAR'}`)].join('\n');
   return { title: 'Palette size: bytes against accuracy',
-           note: `${MARKS.length - 1} marks (gradient excluded), 180 + 192 + 512 + maskable 512 px, zopfli on. This is the sweep that sets the default.`,
+           note: `${MARKS.length - 1} marks (gradient excluded), 180 + 192 + 512 px all placed, zopfli on. This is the sweep that sets the default.`,
            text };
 };
 
@@ -238,10 +238,10 @@ sweeps.concurrency = async () => {
   await build({ input: join(FIXTURES, 'general.svg'), out: prep, sizes: [16], bg: null, zopfli: false });
   const iconSvg = join(prep, 'icon.svg');
 
-  // The sizes a default build queues: the apple icon and the maskable icon on their ground, the
-  // two --sizes entries, and the ICO payload. Rendered from icon.svg for all five, since the
+  // The sizes a default build queues: the apple icon and the two --sizes entries on
+  // their ground, and the ICO payload. Rendered from icon.svg for all four, since the
   // timing question is about oxipng contention, not about what is drawn.
-  const JOBS = [{ px: 180, bg: '#000000' }, { px: 192, bg: null }, { px: 512, bg: null }, { px: 512, bg: '#000000' }, { px: 32, bg: null }];
+  const JOBS = [{ px: 180, bg: '#000000' }, { px: 192, bg: '#000000' }, { px: 512, bg: '#000000' }, { px: 32, bg: null }];
 
   let seq = 0;
   const renderOne = async ({ px, bg }, zi) => {
