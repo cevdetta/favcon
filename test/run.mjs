@@ -309,6 +309,13 @@ describe('accuracy', { skip: skipNoTools }, () => {
     assert.ok(await at(8) > THRESHOLD_PCT, '8 colours should not be enough for a gradient');
     assert.ok(await at(256) < await at(8), 'a bigger palette should help');
   });
+
+  it('scores a padded icon against an identically padded reference', async () => {
+    const { out } = await buildOnce('pad-20', { input: fixture('general.svg'), sizes: [192], padding: 20, zopfli: false });
+    const ref = await reference(resvg, { source: fixture('general.svg'), px: 192, bg: '#000000', fitted: true, padding: 20 });
+    const s = score(decode(readFileSync(join(out, 'icon-192.png'))), ref);
+    assert.ok(s.pct <= THRESHOLD_PCT, `pct ${s.pct.toFixed(4)}% - the reference is placed differently`);
+  });
 });
 
 // ------------------------------------------------------------------ 10, 15 --

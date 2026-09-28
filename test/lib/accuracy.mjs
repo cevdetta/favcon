@@ -32,13 +32,14 @@ const CHANNEL_TOLERANCE = 8;      // out of 255
  * against the optimised SVG would make the gate blind to exactly what it exists to measure:
  * the error floatPrecision introduces before a rasteriser is ever involved.
  *
- * `fitted: true` is the reference for a masked icon (apple-touch-icon.png, icon-maskable-512.png):
+ * `fitted: true` is the reference for a padded icon (apple-touch-icon.png, icon-<size>.png):
  * the same source placed in the safe zone at `px` by favcon's own placeInSafeZone, measured on
- * the SOURCE's renders.
+ * the SOURCE's renders. `padding` must match the build's, or the gate scores a placement
+ * difference as pixel error.
  * The placement is shared on purpose - the gate is about pixels, not about re-deriving where
  * the mark goes - and the masked-icon tests check the placement itself.
  */
-export async function reference(resvgPath, { source, px, bg, vars, fitted = false }) {
+export async function reference(resvgPath, { source, px, bg, vars, fitted = false, padding = 'auto' }) {
   const dir = mkdtempSync(join(tmpdir(), 'favcon-ref.'));
   try {
     let svg = resolveVars(readFileSync(source, 'utf8'), vars);
@@ -66,7 +67,7 @@ export async function reference(resvgPath, { source, px, bg, vars, fitted = fals
         const img = decode(readFileSync(p));
         return { width: img.width, height: img.height, rgba: img.data };
       };
-      svg = (await placeInSafeZone(svg, render, px)).svg;
+      svg = (await placeInSafeZone(svg, render, px, padding)).svg;
     }
     writeFileSync(src, svg);
     await execFileAsync(resvgPath, ['--quiet', '-w', String(px), '-h', String(px),
