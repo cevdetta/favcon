@@ -57,7 +57,7 @@ conflict, the bar wins — which is what decision 6 below turns on.
 | 11 | **`--sizes` defaults to `192 512`.** *(Reversed. The original was `256 512`.)* | The documentation every browser is held to asks for both: web.dev's install criteria ("must include a 192px and a 512px icon", 2024-09-19), Chrome's Lighthouse installable-manifest doc (2024-04-16) and MDN's Making PWAs installable (2026-09-07). Desktop Chromium's code is looser: `installable_evaluator.cc` accepts one `any` icon of 144 px or more, and Chromium 152's `Page.getInstallabilityErrors` reported no error for a manifest with only a 512. That is one engine on one platform, with Android, Edge, Samsung Internet and Firefox untested, so the documented pair wins; the 192 costs 159 B on a flat mark. SVG cannot stand in for either: an SVG entry makes the Android WebAPK install fail ([crbug.com/40925759](https://issues.chromium.org/issues/40925759)). |
 | 12 | **The SVG is emitted twice: `logo.svg` keeps the animation, `icon.svg` never has it.** | Publishing the stripped copy costs nothing — it was already being built — and removes the one thing a single-file layout got wrong: a favicon `<link>` pointing at a file carrying `<style>`, `@keyframes` and classes that no rasteriser and no ICO can use. **Re-measured:** every raster is byte-identical between the default and `--no-animation` builds, and `icon.svg` is the smaller of the two on every fixture. |
 | 13 | **The rasters stay serial.** **Re-measured and confirmed — though not for the reason originally given; see the note below the table.** | Zopfli is ~98 % of wall clock, so overlapping it looked obvious — it is not. Four interleaved reps each: **13.80 s serial vs 14.08 s concurrent**. A `-t` sweep (2/4/6/8/10/12/16) moved contention around without beating it. The concurrency originally spent on the two svgo passes (0.894 s → 0.456 s) is gone, though not for the reason first recorded: see decision 1 — importing svgo replaced two ~180 ms concurrent spawns with one 309 ms import. The `--bg` probe is still overlapped, because it is a real spawn. |
-| 14 | **One render per distinct (size, background).** | `--sizes 32` otherwise rasterises and zopflis 32 px twice, once for `icon-32.png` and once for the ICO payload, for identical bytes. De-duplicating also makes "the ICO payload is `icon-32.png`" true by construction rather than by coincidence. |
+| 14 | **One render per distinct (size, background).** | Since the set collapsed to one padded set, `--sizes 32` now renders twice: `(32, bg)` for `icon-32.png` and `(32, null)` for the ICO payload. Under `--bg none` the icon is unpadded too, so the two share one render and "the ICO payload is `icon-32.png`" holds again — by construction rather than by coincidence, as before. |
 | 15 | **External binaries: `resvg` and `oxipng` are documented installs; `pngquant-bin` is an `optionalDependency`; `svgo` is a real dependency.** | No npm package can deliver resvg or oxipng. `resvg-cli` uses `--fit-width`, not `-w`, and pins resvg 0.34 against our 0.48.1. `oxipng` on npm is 1.0.1 from 2021 (wrapping oxipng 4.0.3) and `oxipng-bin` wraps 8.0.0 — **neither has `--zi`**, so wiring them up would silently produce larger files. |
 
 
@@ -195,15 +195,16 @@ a mark whose motion selects nothing by class still gets the full inlining.
 ### 19. `--colors` stays at 8, and that is a trade rather than a clean win
 
 The 1.0 % accuracy bar is met at `--colors 16` on every file. It is **not** met at 8 on every
-mark that ships here: worst 1.87 % on `heavy.svg` at 192 px, which exists to be adversarial,
-with `general`, `flat`, `mask` and `animated` also over at 192, and `flat` (1.11 %) and
-`animated` (1.12 %) over on the 180 px apple icon. Every 512 px file is inside at 8 (worst
-0.71 %, `heavy`). A small icon is mostly edge pixels. See the table in `docs/BENCHMARKS.md`.
+mark that ships here: `flat.svg` (1.11 % at 180 and at 192) and `animated.svg` (1.12 % at 180,
+1.57 % at 192) stay over. Padding took the rest inside — `heavy` at 192 went from 1.87 % to
+0.65 %, `general` from 1.38 % to 0.90 % — because a smaller mark has fewer edge pixels on the
+same canvas. Every 512 px file is inside at 8 (worst 0.52 %, `animated`). A small icon is
+mostly edge pixels. See the table in `docs/BENCHMARKS.md`.
 
 8 is the default anyway, and the reasoning is worth stating plainly rather than hiding behind
 the bar:
 
-- It is **~18 % smaller** across the corpus, and bytes are what this tool is for.
+- It is **≈16 % smaller** than 16 across the fixtures, and bytes are what this tool is for.
 - The misses are anti-aliased edges at small sizes and smooth colour ramps. A mark drawn on
   a pixel grid has neither: `tiles.svg` scores **0.00 %** at 8 on every file, `wide` at most
   0.13 %. For such a mark, 16 spends 18 % more bytes to improve nothing.
@@ -217,6 +218,9 @@ changed and this decision needs rewriting rather than quietly drifting.
 
 ### 20. Masked icons at their documented sizes, placed by measurement, snapped to whole pixels
 
+The measurement below is now the **default** of `--padding` (`auto`): an explicit percentage
+overrides it (decision 22). What it measures, and the snap that follows it, are unchanged.
+
 **Which files the platforms read:**
 
 | Consumer | What it reads | Source |
@@ -227,15 +231,22 @@ changed and this decision needs rewriting rather than quietly drifting.
 | iOS and iPadOS | `apple-touch-icon` over manifest icons; 180, 167 and 152 px documented; `purpose` and SVG ignored | Apple's Configuring Web Applications, firt.dev's iOS PWA notes |
 | Windows | `any` icons, drawn without a plate on light and dark | Microsoft Learn, app icon and PWA icon guidance |
 
-**Two masked files, at the documented sizes.** `apple-touch-icon.png` stays 180 px, the largest
-size Apple documents. `icon-maskable-512.png` is one 512 px maskable icon, the size web.dev's
-and Evil Martians' sets use; Chrome picks it by size and scales it down. An earlier draft of
-this decision made a single 512 px `apple-touch-icon.png` serve both. No source recommends a
-512 px apple icon, so it was reverted: Apple's guide only says iOS would scale a larger one.
+**One padded set, at the documented sizes.** `apple-touch-icon.png` stays 180 px, the largest
+size Apple documents. Every `--sizes` entry is padded into the safe zone the same way and the
+set is declared `"any maskable"` (decision 22) — there is no separate `icon-maskable-512.png`
+anymore. An earlier draft of this decision made a single 512 px `apple-touch-icon.png` serve
+both. No source recommends a 512 px apple icon, so it was reverted: Apple's guide only says
+iOS would scale a larger one.
 
-**`any` stays transparent and separate.** Windows shows app icons without a tile, so a padded
-opaque icon there reads as a small square; web.dev advises against `"any maskable"` on one file
-for the same reason.
+**One file carries both purposes.** This reverses what this decision first said — that `"any"`
+stays transparent and separate because web.dev advises against `"any maskable"` on one file.
+The advice is real and the cost is real (decision 22 states it plainly): on a platform that
+does not mask, the padded icon shows a smaller mark on its ground. But two files cost a second
+512 px render, a second manifest entry, and — the deciding point — a mark that can only ever be
+in one of the two places: padded for the mask or full-bleed for the desktop. The set is padded
+into the safe zone, so it is honestly both, and Chrome will not install a PWA whose icons are
+all `maskable` — it needs at least one `any`. `--bg none` opts out entirely: transparent,
+unpadded, `"any"` only.
 
 **Measured placement.** The farthest opaque pixel's outer corner, found on a render at the
 icon's own size, decides the scale. On the C mark, iOS's 22.37 % rounded mask cut 12 of 14 310
@@ -298,4 +309,44 @@ is not libimagequant, and `@jsquash/oxipng` exposes no zopfli. The site says so 
 installed and then thrown `ERR_MODULE_NOT_FOUND` on first run. `lib` now ships and the
 tarball test asserts it by name — the one assertion standing between the split and a broken
 publish.
+
+### 22. `--padding`: measured by default, fixed on request, one set for both purposes
+
+Decision 20 measures where the mark goes. This decision is about who chooses the number — and
+about collapsing the two-file set (`any` plus `maskable`) into one.
+
+**No fixed percentage is correct for every mark.** The W3C safe zone is a *circle* of radius
+40 % of the icon; how much of it a mark can use depends on its shape. A round mark fills 80 %
+of the width; a square mark's corners touch the circle when the box is 56.6 % of the width,
+needing 21.7 % padding per side. Measured across the fixtures, `auto` chooses:
+
+| fixture | box / canvas | padding it chose |
+|---|---|---|
+| `gradient` | 434/512 | 7.6 % per side |
+| `general` | 408/512 | 10.2 % |
+| `heavy` | 366/512 | 14.3 % |
+| `tiles` | 320/512 | **18.8 %** |
+
+A fixed 11 % (the "20 px of 180" figure) is right for a round mark and pushes a square one's
+corners outside the safe circle. So `auto` stays the default and an explicit `--padding`
+percentage is the override: applied literally (`box = canvas * (1 - 2p)`, rounded down to an
+even pixel so the offset stays whole) and never snapped, because snapping exists to find a
+crisper size *near* the measured fit and moving a number the caller chose would make the flag
+mean something different from what it says. Capped at 45: 50 leaves no mark at all, and a
+value that produces an empty icon should be a message rather than a blank PNG.
+
+**`"any maskable"` on one file.** Chrome will not install a PWA whose icons are all
+`maskable` — it needs at least one `any` — so the padded set cannot be `maskable` alone, and
+maintaining a second unpadded file doubles the 512 px cost for a mark that can only sit in one
+place. The set is padded into the safe zone, so `"any maskable"` is honest.
+
+**The cost, stated plainly.** `icon-192.png` and `icon-512.png` are now padded and opaque. On
+a platform that does *not* mask (most desktops), they render as a smaller mark inside the
+`--bg` ground rather than edge to edge. That is the trade web.dev warns about, and it is now
+the default.
+
+**`--bg none` opts out entirely.** Transparent, unpadded, manifest purpose `"any"` only: the
+spec lets a platform composite a transparent icon onto any colour, so the safe zone would mean
+nothing, and padding 32 px of tab furniture only makes the mark smaller. Unpadded,
+`icon-32.png` is the native render again — the ICO payload's twin, as it was before.
 

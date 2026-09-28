@@ -30,10 +30,10 @@ Measured in headless Chromium against the CLI on the same marks, same options
 
 | fixture | logo.svg | icon.svg | manifest | placement | PNG bytes |
 |---|---|---|---|---|---|
-| `tiles` | exact | exact | exact | identical | 951 → 980 (+3.0%) |
-| `heavy` | exact | exact | exact | identical | 7080 → 7248 (+2.4%) |
-| `general` | exact | exact | exact | identical | 6204 → 6591 (+6.2%) |
-| `gradient` | exact | exact | exact | identical | 8779 → 19066 (**+117%**) |
+| `tiles` | exact | exact | exact | identical | 600 → 620 (+3.3%) |
+| `heavy` | exact | exact | exact | identical | 3574 → 3758 (+5.1%) |
+| `general` | exact | exact | exact | identical | 3525 → 3758 (+6.6%) |
+| `gradient` | exact | exact | exact | identical | 5228 → 10730 (**+105%**) |
 
 So the SVGs, the manifest and the safe-zone placement are exact; the PNGs cost a few percent on
 a flat mark and **more than double on a gradient**. That last row is the honest headline: this

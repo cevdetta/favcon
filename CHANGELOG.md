@@ -14,7 +14,7 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 - **A website** (`site/`): favcon in the browser, client-side, nothing uploaded. Astro, with a
   WASM raster stage (`@resvg/resvg-wasm`, `image-q`, `@jsquash/oxipng`) and a dependency-free
   zip writer. `logo.svg`, `icon.svg`, `site.webmanifest` and the safe-zone placement are
-  byte-identical to the CLI's; the PNGs are +2.4 % to +117 % larger, and the page says so with
+  byte-identical to the CLI's; the PNGs are +3.3 % to +105 % larger, and the page says so with
   the measurements rather than a disclaimer.
 - **`lib/core.mjs`**, favcon's isomorphic half — the svgo stage, the ICO container, the mask
   maths, the manifest and the `<link>` block — imported by both the CLI and the website so the
@@ -24,14 +24,19 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   Chromium, driven over the DevTools protocol with Node's built-in `WebSocket` and serving
   `dist/` from inside its own process. Checks PNG and ICO magic bytes, not just byte counts.
 
-- `icon-maskable-512.png`: the mark placed in the W3C safe zone (a circle of radius 40 %) on
-  `--bg`, listed by `--manifest` as the `maskable` icon for Android, ChromeOS and macOS, after
-  the `any` icons. Written by default; `--bg none` writes no maskable icon, since one has to be
-  opaque. `icon.svg` is never listed in the manifest (crbug.com/40925759).
-- The placement is measured, not padded: the farthest opaque pixel decides the scale at the
-  icon's own size, and the scale then snaps down, within 10 %, to a size where the mark lands on
-  whole pixels if that at least halves its anti-aliased pixels. `build()` returns it as
-  `fit: { apple, maskable }`, and `placeInSafeZone()` is exported so the test suite's reference
+- **One padded icon set, declared `"any maskable"`.** Every `--sizes` entry is placed in
+  the W3C safe zone (a circle of radius 40 %) on `--bg`, the way the apple icon already was,
+  so there is no separate `icon-maskable-512.png`: the set is honestly both, and Chrome will
+  not install a PWA whose icons are all `maskable`. `--bg none` opts out entirely —
+  transparent, unpadded, `"any"` only. `icon.svg` is never listed in the manifest
+  (crbug.com/40925759). On desktops, which do not mask, the icons show a smaller mark on
+  their ground; that cost is stated rather than hidden (decision 22).
+- The placement is measured by default and fixed on request: the farthest opaque pixel
+  decides the scale at the icon's own size, and the scale then snaps down, within 10 %, to a
+  size where the mark lands on whole pixels if that at least halves its anti-aliased pixels.
+  That measurement is now the default of **`--padding`** (`auto`); a number overrides it with
+  a fixed percentage per side, applied literally and never snapped. `build()` returns it as
+  `fit: { apple, icons }`, and `placeInSafeZone()` is exported so the test suite's reference
   places the mark identically.
 
 - `favcon/astro`: an Astro integration. Builds in `astro:build:start` so Astro's ordinary

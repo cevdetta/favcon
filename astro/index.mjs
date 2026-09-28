@@ -44,10 +44,12 @@ const cacheKey = async ({ version, source, options, tools }) => sha256(JSON.stri
   // of every default, and a cache that silently kept serving the old bytes if one of them
   // changed. `version` already covers that: a changed default is a minor release at least.
   // The cost is a cache miss when someone passes a value that happens to be the default.
+  // Every build option is in the key: one missing field is a stale cache after an upgrade.
   options: {
     colors: options.colors ?? null,
     sizes: options.sizes ? [...options.sizes].map(Number).sort((a, b) => a - b) : null,
     bg: options.bg === undefined ? null : options.bg,
+    padding: options.padding ?? null,
     vars: Object.fromEntries(Object.entries(options.vars ?? {})
       .map(([k, v]) => [k.replace(/^--/, ''), String(v)]).sort()),
     animation: options.animation !== false,

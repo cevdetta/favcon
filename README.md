@@ -6,7 +6,7 @@ One SVG in, an optimised favicon set out.
 npx favcon logo.svg --out public
 ```
 
-That is the whole quickstart. It writes seven files, prints their sizes, and tells you if your
+That is the whole quickstart. It writes six files, prints their sizes, and tells you if your
 mark is animated.
 
 ```
@@ -14,9 +14,8 @@ logo.svg                  289 B  static (no animation in the source)
 icon.svg                  289 B
 favicon.ico               279 B
 apple-touch-icon.png      711 B  mark at 142px of 180 in the safe zone
-icon-192.png              927 B
-icon-512.png             2511 B
-icon-maskable-512.png    2055 B  mark at 408px of 512 in the safe zone
+icon-192.png              759 B  mark at 152px of 192 in the safe zone
+icon-512.png             2055 B  mark at 408px of 512 in the safe zone
 ```
 
 (That is `test/fixtures/general.svg`, a two-colour mark, at the defaults. Your bytes depend on
@@ -63,8 +62,7 @@ Node 22.12 or newer.
 | `icon.svg` | The same optimisation **plus a structural animation strip**. This is the browser favicon *and* the file every raster below is rendered from. |
 | `favicon.ico` | One 32×32 entry, stored as a raw PNG in a 22-byte container. |
 | `apple-touch-icon.png` | 180×180 (60pt @3x; no iPhone renders above @3x) on the `--bg` ground, the mark placed in the safe zone so iOS's rounded mask cuts nothing. |
-| `icon-<size>.png` | Transparent, rendered natively at each `--sizes` entry. Default 192 and 512, the pair Chrome's install criteria document. The manifest's `any` icons. |
-| `icon-maskable-512.png` | 512×512 on the `--bg` ground, the mark placed in the safe zone. The manifest's `maskable` icon for Android, ChromeOS and macOS. Not written with `--bg none`. |
+| `icon-<size>.png` | On the `--bg` ground, the mark placed in the safe zone the same way (`--padding`, default `auto`). Default 192 and 512, the pair Chrome's install criteria document. The manifest's `any maskable` icons. |
 | `site.webmanifest` | Only with `--manifest`. Icons only — you merge your own `name` and `theme_color`. |
 
 Two SVGs, because they are not the same file. `icon.svg` is what a `<link rel="icon">` points
@@ -100,9 +98,12 @@ as small as they can be, this one.
 ```
 -o, --out DIR     Output directory (default: current)
     --colors N    Palette size, 2-256 (default: 8)
-    --sizes LIST  Transparent "any" PNG sizes (default: "192 512")
-    --bg COLOR    Ground of the masked icons (default: #000000). "none" keeps apple-touch-icon
-                  transparent and writes no maskable icon.
+    --sizes LIST  Padded "any maskable" PNG sizes (default: "192 512")
+    --bg COLOR    Ground of the padded icons (default: #000000). "none" keeps the set
+                  transparent and unpadded, declared "any" only.
+    --padding P   Margin of each padded icon, as a percentage per side (default: auto).
+                  `auto` measures the mark's own extent and snaps it to whole pixels;
+                  give a number to override it.
     --var N=V     Set a CSS custom property, e.g. --var brand=#0E7C68. Repeatable.
     --no-animation  Build logo.svg static too, so it equals icon.svg.
     --manifest    Also write site.webmanifest.
@@ -129,48 +130,53 @@ resolves every custom property before anything is rasterised.)
 ### `--bg`
 
 iOS composites transparent Home Screen icons onto **black**, and a maskable icon should be
-opaque, so `apple-touch-icon.png` and `icon-maskable-512.png` get a ground rather than an alpha
-channel they would lose anyway. The default is `#000000`
+opaque, so the padded icons get a ground rather than an alpha channel they would lose anyway.
+The default is `#000000`
 — what the platform would have done to a transparent icon regardless, minus the tRNS chunk —
 and favcon warns when you did not choose, because the right ground is a property of your mark
-and not of the format. `--bg '#fff'` for a mark drawn on light, `--bg none` to keep the alpha.
+and not of the format. `--bg '#fff'` for a mark drawn on light, `--bg none` to keep the alpha
+(and with it an unpadded set, declared `"any"` only).
 
 The value is validated by asking resvg to render a 1×1 pixel with it, so anything resvg takes
 works — `#fff`, `rebeccapurple`, `rgb(14 124 104)`, `hsl(170 80% 27%)` — and the validator can
 never disagree with the renderer.
 
-### The masked icons
+### The padded icons
 
-Every platform that installs a web app shows its icon through a shape of its own, and each one
-reads a different file:
+Every platform that installs a web app shows its icon through a shape of its own:
 
 | Platform | Reads | Shape | favcon's file |
 |---|---|---|---|
 | iOS, iPadOS, Safari Add to Dock | `apple-touch-icon`, 180 px for iPhone | rounded square, corners about 22 % | `apple-touch-icon.png` |
-| Android (Chrome, WebAPK) | manifest, `maskable` preferred | circle, squircle, rounded square | `icon-maskable-512.png` |
-| ChromeOS, macOS (Chrome installs) | manifest, `maskable` where given | the OS's rounded shape | `icon-maskable-512.png` |
-| Windows, Linux desktops | manifest, `any` | none; drawn as is, on light and dark | `icon-192.png`, `icon-512.png` |
-| Chrome's install criteria | manifest, `any` icons at 192 and 512 px | none | `icon-192.png`, `icon-512.png` |
+| Android (Chrome, WebAPK) | manifest, `any maskable` | circle, squircle, rounded square | `icon-192.png`, `icon-512.png` |
+| ChromeOS, macOS (Chrome installs) | manifest, `any maskable` | the OS's rounded shape | `icon-192.png`, `icon-512.png` |
+| Windows, Linux desktops | manifest, `any maskable` | none; drawn as is, on light and dark | `icon-192.png`, `icon-512.png` |
+| Chrome's install criteria | manifest, `any maskable` icons at 192 and 512 px | none | `icon-192.png`, `icon-512.png` |
 | Browser tabs | `<link rel="icon">` | none | `icon.svg`, `favicon.ico` |
 
 The sizes are the documented ones: 180 px is the largest size Apple lists for a web clip
 icon, and web.dev's install criteria, Chrome's own docs and MDN all ask for a 192 and a 512.
-The maskable icon is one 512 px file, as in web.dev's and Evil Martians' recommended sets;
-Chrome picks it by size and scales it down. The `any` icons stay transparent, because a
-Windows taskbar shows icons without a tile and a padded icon there would sit as a small square.
+One set carries both purposes: the icons are padded into the safe zone, so they are honestly
+maskable, and Chrome will not install a PWA whose icons are all `maskable` — it needs at
+least one `any`. The cost is on desktops, which do not mask: there the icon shows a smaller
+mark on its ground rather than edge to edge. `--bg none` opts out entirely (transparent,
+unpadded, `"any"` only).
 
 `icon.svg` is not in the manifest. An SVG entry makes Chrome's Android install fail and fall
 back to a home-screen bookmark ([crbug.com/40925759](https://issues.chromium.org/issues/40925759)).
 
 **The safe zone.** The W3C Web App Manifest names the one area every mask shows: a circle
 centred on the icon, with a radius of 40 % of its size. iOS's rounded square contains that
-circle whole, so both masked icons use it.
+circle whole, so every padded icon uses it.
 
-**Placement is measured, not padded.** favcon renders `icon.svg` at each masked icon's size,
-finds the farthest opaque pixel from the centre (its outer corner, so the whole pixel counts),
-and scales the mark until that pixel sits on the safe circle. A mark with its own margin is
-enlarged, one that reaches its corners is shrunk. A source opaque in all four corners is
-full-bleed, drawn with its own ground, and used as it is.
+**Placement is measured by default, fixed on request.** `auto` (the default) renders `icon.svg`
+at each padded icon's size, finds the farthest opaque pixel from the centre (its outer corner,
+so the whole pixel counts), and scales the mark until that pixel sits on the safe circle. A mark
+with its own margin is enlarged, one that reaches its corners is shrunk. `--padding` overrides
+it with a fixed percentage per side — applied literally and never snapped. No fixed number is
+right for every mark (a round one fills 80 % of the width; a square one's corners touch the
+safe circle at 56.6 %): across the fixtures `auto` chooses 7.6 %–18.8 % per side. A source
+opaque in all four corners is full-bleed, drawn with its own ground, and used as it is.
 
 **Then it snaps to whole pixels.** An exact fit scales by an arbitrary factor, so the edges of
 a mark drawn on a grid fall between pixels and every one of them is anti-aliased. favcon walks
@@ -186,8 +192,9 @@ at 512 px:
 
 At 180 px the same mark snaps from 116 to 112 px and the apple icon is 151 B.
 
-`--bg none` keeps `apple-touch-icon.png` transparent and writes no maskable icon, since a
-platform composites a transparent maskable icon onto a colour of its own choosing.
+`--bg none` keeps the set transparent and unpadded, declared `"any"` only: a platform
+composites a transparent icon onto a colour of its own choosing, so the safe zone would mean
+nothing, and padding 32 px of tab furniture only makes the mark smaller.
 
 ## Animation
 
@@ -239,7 +246,7 @@ favcon({
   input: 'src/logo.svg',
   sizes: [192, 512],
   vars: { brand: '#0E7C68' },
-  bg: '#0E1C28',     // the masked icons' ground; also a good background_color below
+  bg: '#0E1C28',     // the padded icons' ground; also a good background_color below
   manifest: { name: 'Example', short_name: 'Ex', theme_color: '#0E7C68', background_color: '#0E1C28' },
   dev: 'fast',       // 'fast' | 'full' | 'skip'
   head: 'inject',    // 'inject' | 'component' | false

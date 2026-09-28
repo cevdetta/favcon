@@ -6,12 +6,14 @@ import type { AstroIntegration } from 'astro';
 export interface FavconOptions {
   /** The mark, relative to the project root. Default: `src/logo.svg`. */
   input?: string;
-  /** Transparent PNG sizes, the manifest's "any" icons. A real array - the CLI's string form exists only because argv is strings. Default: `[192, 512]`. */
+  /** Padded PNG sizes, the manifest's "any maskable" icons. A real array - the CLI's string form exists only because argv is strings. Default: `[192, 512]`. */
   sizes?: number[];
   /** Palette size, 2-256. Default: 8. Raise it to 16 for a mark with gradients. */
   colors?: number;
-  /** Ground of the masked icons, apple-touch-icon.png and icon-maskable-512.png. `null` keeps apple-touch-icon.png transparent and writes no maskable icon. Default: `#000000`. */
+  /** Ground of the padded icons. `null` keeps the set transparent and unpadded, declared `"any"` only. Default: `#000000`. */
   bg?: string | null;
+  /** Margin of each padded icon, as a percentage per side. `'auto'` measures the mark's own extent and snaps it to whole pixels; a number overrides it. Default: `'auto'`. */
+  padding?: number | 'auto';
   /** CSS custom properties, with or without the leading `--`. */
   vars?: Record<string, string | number>;
   /** `false` builds logo.svg static too, so it equals icon.svg. Default: `true`. */
