@@ -11,6 +11,19 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Added
 
+- **A website** (`site/`): favcon in the browser, client-side, nothing uploaded. Astro, with a
+  WASM raster stage (`@resvg/resvg-wasm`, `image-q`, `@jsquash/oxipng`) and a dependency-free
+  zip writer. `logo.svg`, `icon.svg`, `site.webmanifest` and the safe-zone placement are
+  byte-identical to the CLI's; the PNGs are +2.4 % to +117 % larger, and the page says so with
+  the measurements rather than a disclaimer.
+- **`lib/core.mjs`**, favcon's isomorphic half — the svgo stage, the ICO container, the mask
+  maths, the manifest and the `<link>` block — imported by both the CLI and the website so the
+  two cannot drift. Three seams make it portable: svgo is injected, the mask maths takes decoded
+  pixels, and `icoWrap` works in `Uint8Array`. See decision 21.
+- `site/test/cdp-check.mjs`: runs the real browser pipeline over four fixtures in headless
+  Chromium, driven over the DevTools protocol with Node's built-in `WebSocket` and serving
+  `dist/` from inside its own process. Checks PNG and ICO magic bytes, not just byte counts.
+
 - `icon-maskable-512.png`: the mark placed in the W3C safe zone (a circle of radius 40 %) on
   `--bg`, listed by `--manifest` as the `maskable` icon for Android, ChromeOS and macOS, after
   the `any` icons. Written by default; `--bg none` writes no maskable icon, since one has to be

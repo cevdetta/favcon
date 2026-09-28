@@ -1,0 +1,94 @@
+/* One stylesheet, no framework. The page is a form and three tables. */
+:root {
+  color-scheme: light dark;
+  --ink: #17202a;
+  --quiet: #5b6875;
+  --line: #d9e0e7;
+  --card: #ffffff;
+  --page: #f4f6f8;
+  --accent: #0e7c68;
+  --warn-bg: #fff8e6;
+  --warn-line: #e6cf95;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7edf3; --quiet: #9aa7b4; --line: #2b3643;
+    --card: #161d26; --page: #0e141b; --accent: #55c2aa;
+    --warn-bg: #241f10; --warn-line: #5b4b22;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1rem 4rem;
+  background: var(--page); color: var(--ink);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.band { max-width: 54rem; margin: 0 auto; padding: 3rem 0 1.5rem; }
+h1 { margin: 0; font-size: 2.25rem; letter-spacing: -0.02em; }
+.lede { margin: 0.25rem 0 0.75rem; font-size: 1.125rem; }
+.quiet { color: var(--quiet); font-size: 0.9rem; }
+main { max-width: 54rem; margin: 0 auto; display: grid; gap: 1.25rem; }
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 1.25rem 1.5rem;
+}
+.card h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+code { font: 0.875em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+.drop {
+  display: grid; place-content: center; gap: 0.25rem; text-align: center;
+  border: 2px dashed var(--line); border-radius: 10px;
+  padding: 2rem 1rem; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop:focus-visible, .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); outline: none; }
+
+.options { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); margin: 1.25rem 0; }
+.options label { display: grid; gap: 0.2rem; font-size: 0.9rem; font-weight: 600; }
+.options .check { grid-template-columns: auto 1fr; align-items: center; gap: 0.5rem; font-weight: 400; }
+input[type="number"], input[type="text"] {
+  font: inherit; padding: 0.45rem 0.6rem; color: var(--ink);
+  background: var(--page); border: 1px solid var(--line); border-radius: 7px;
+}
+button {
+  font: inherit; font-weight: 600; cursor: pointer;
+  padding: 0.6rem 1.1rem; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.status { margin: 0.75rem 0 0; min-height: 1.5rem; font-size: 0.9rem; color: var(--quiet); }
+.status.good { color: var(--accent); }
+.status.bad { color: #c0392b; }
+@media (prefers-color-scheme: dark) { .status.bad { color: #ef8a7d; } }
+
+.previews { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.25rem; }
+.previews figure { margin: 0; text-align: center; }
+.previews figcaption { font-size: 0.8rem; color: var(--quiet); margin-top: 0.35rem; }
+.swatch {
+  width: 112px; height: 112px; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 10px;
+}
+.swatch.light { background: #fff; }
+.swatch.dark { background: #111; }
+.swatch img { width: 84px; height: 84px; }
+/* What Android actually does to a maskable icon: a circle, nothing else visible. */
+img.masked { clip-path: circle(50%); width: 96px; height: 96px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--quiet); }
+td:nth-child(2) { font-variant-numeric: tabular-nums; }
+.compare td, .compare th { vertical-align: top; }
+
+.outputs { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0; }
+.outputs dt { font-weight: 600; }
+.outputs dd { margin: 0; color: var(--quiet); }
+@media (max-width: 34rem) { .outputs { grid-template-columns: 1fr; } .outputs dd { margin-bottom: 0.5rem; } }
+
+pre {
+  overflow-x: auto; padding: 0.9rem 1rem; margin: 0;
+  background: var(--page); border: 1px solid var(--line); border-radius: 8px;
+  font: 0.85rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+footer { max-width: 54rem; margin: 2rem auto 0; }
+a { color: var(--accent); }

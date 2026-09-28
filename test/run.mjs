@@ -195,7 +195,8 @@ describe('the ICO container', () => {
   it('describes the decoded image, not the encoding', () => {
     // A 1x1 fully paletted PNG: bColorCount must still be 0 and wBitCount still 32.
     const png = encode({ width: 1, height: 1, data: new Uint8Array([1, 2, 3, 255]) });
-    const ico = icoWrap(png, 1);
+    // icoWrap returns a Uint8Array so the website can call it too; Buffer.from to read fields.
+    const ico = Buffer.from(icoWrap(png, 1));
     assert.equal(ico[8], 0, 'bColorCount');
     assert.equal(ico.readUInt16LE(10), 1, 'wPlanes');
     assert.equal(ico.readUInt16LE(12), 32, 'wBitCount');
@@ -735,6 +736,10 @@ describe('the published tarball', () => {
     const pkg = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
     const files = pkg.files.map((f) => f.path);
     assert.ok(files.includes('bin/favcon.mjs'), 'bin/favcon.mjs is missing');
+    // bin/favcon.mjs imports lib/core.mjs, so a tarball without it installs and then throws
+    // ERR_MODULE_NOT_FOUND on first run. This assertion is the only thing standing between
+    // the split and a broken publish.
+    assert.ok(files.includes('lib/core.mjs'), 'lib/core.mjs is missing - the package cannot run');
     assert.ok(files.some((f) => f.startsWith('astro/')), 'astro/ is missing');
     assert.ok(files.includes('package.json') && files.includes('README.md'));
     for (const f of files) {

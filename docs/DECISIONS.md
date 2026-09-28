@@ -254,3 +254,48 @@ The snap walks the box down in whole even pixels (so the offset is whole too) an
 at least halves them, so a curved mark, anti-aliased at every size, keeps its exact fit and is
 never shrunk for nothing. The renders are a handful of transparent resvg calls per icon,
 milliseconds each, against a build of seconds.
+
+### 21. An isomorphic core, because the website runs the same SVG stage
+
+§10 of `CLAUDE.md` says `bin/favcon.mjs` stays one file. The website breaks that, and it is
+worth being exact about why rather than quietly dropping the rule.
+
+The rule exists to stop the CLI fragmenting into a directory of helpers that have to be read
+together to understand one pipeline. That intent still holds, and everything the CLI alone does
+— tool resolution, spawning, staging, the atomic rename, `build()`, `cli()` — is still in the
+one file. What moved to `lib/core.mjs` is only what a browser can also run.
+
+The alternative was reimplementing it: four svgo plugins, the safe-zone fit-and-snap, the ICO
+container and the manifest, against a second set of bugs, with no gate able to tell the two
+apart. Sharing a file is the lesser evil by a wide margin.
+
+**Three seams make it work, and each is a parameter rather than a bundler trick:**
+
+- **svgo is injected.** `createSvgStage({ optimize, builtinPlugins })` takes the Node build from
+  the CLI and `svgo/browser` from the website. svgo's browser bundle exports both, so the plugin
+  list is one list. No aliasing, no conditional exports, nothing to misconfigure silently.
+- **The mask maths takes decoded pixels, not a PNG.** The CLI decodes resvg's output with
+  `node:zlib`; the website already has a WASM PNG codec for its own pipeline. Neither carries
+  the other's decoder.
+- **`icoWrap` works in `Uint8Array` and `DataView`.** Buffer is a Uint8Array, so Node callers
+  are unaffected.
+
+**Measured, in headless Chromium against the CLI on the same marks and options:**
+
+| fixture | logo.svg | icon.svg | manifest | placement | PNG bytes |
+|---|---|---|---|---|---|
+| `tiles` | exact | exact | exact | identical | 951 → 980 (+3.0 %) |
+| `heavy` | exact | exact | exact | identical | 7080 → 7248 (+2.4 %) |
+| `general` | exact | exact | exact | identical | 6204 → 6591 (+6.2 %) |
+| `gradient` | exact | exact | exact | identical | 8779 → 19066 (**+117 %**) |
+
+The SVGs, the manifest and the placement are exact — including the snap, so the mark lands on
+the same pixel in both. The PNGs are not, and a gradient mark **more than doubles**: `image-q`
+is not libimagequant, and `@jsquash/oxipng` exposes no zopfli. The site says so on the page.
+
+**The split also broke the published package, briefly.** `bin/favcon.mjs` imports
+`../lib/core.mjs`, and `files` shipped only `bin` and `astro`, so the tarball would have
+installed and then thrown `ERR_MODULE_NOT_FOUND` on first run. `lib` now ships and the
+tarball test asserts it by name — the one assertion standing between the split and a broken
+publish.
+

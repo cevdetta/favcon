@@ -1,0 +1,19 @@
+{
+  "name": "favcon-site",
+  "private": true,
+  "type": "module",
+  "description": "favcon in the browser: the same SVG stage, a WASM raster stage, nothing uploaded.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.0.0",
+    "svgo": "^4.1.0",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "@jsquash/png": "^3.1.1",
+    "@jsquash/oxipng": "^2.3.0",
+    "image-q": "^4.0.0"
+  }
+}

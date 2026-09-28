@@ -1,0 +1,177 @@
+// The browser's build(). Same SVG stage as the CLI, a different raster stage, and honest about
+// which is which.
+//
+// What is shared, by importing lib/core.mjs rather than copying it:
+//
+//   * the four svgo plugins and the whole plugin list, via createSvgStage. svgo's browser build
+//     exports the same `optimize` and `builtinPlugins`, so icon.svg and logo.svg come out
+//     byte-identical to the CLI's.
+//   * squareIconSvg, so a non-square mark is boxed the same way
+//   * placeInSafeZone, so the mark lands in the same place in the masked icons - including the
+//     snap to whole pixels
+//   * icoWrap, manifestJson, linkTags
+//
+// What is not, and cannot be: resvg, pngquant and oxipng are binaries. Their WASM substitutes
+// are different programs, and one difference dominates - @jsquash/oxipng exposes no zopfli, and
+// zopfli is where most of the CLI's byte advantage comes from. So the PNGs here are LARGER than
+// the CLI's and are not reproducible against it. The page says so; this comment is here so that
+// nobody later mistakes the divergence for a bug and "fixes" it by loosening the CLI.
+
+import { initWasm, Resvg } from '@resvg/resvg-wasm';
+import resvgWasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
+import { optimise as oxipng } from '@jsquash/oxipng';
+import { decode as decodePng, encode as encodePng } from '@jsquash/png';
+import { applyPalette, buildPalette, utils } from 'image-q';
+import { builtinPlugins, optimize } from 'svgo/browser';
+
+import {
+  APPLE_SIZE, createSvgStage, DEFAULT_BG, DEFAULT_COLORS, DEFAULT_SIZES, FavconError, ICO_SIZE,
+  icoWrap, linkTags, MASKABLE_SIZE, manifestJson, placeInSafeZone, squareIconSvg,
+} from '../../../lib/core.mjs';
+import { zip } from './zip.mjs';
+
+const { optimiseSvg } = createSvgStage({ optimize, builtinPlugins });
+
+// oxipng's top level. 6 is its `-o max`; there is no --zopfli here, which is the whole reason
+// these PNGs are bigger than the CLI's.
+const OXIPNG = { level: 6, interlace: false, optimiseAlpha: true };
+
+let wasmReady;
+const ready = () => (wasmReady ??= initWasm(fetch(resvgWasmUrl)));
+
+/** resvg at px x px. icon.svg is always square by the time it gets here, so width is enough. */
+const render = async (svgText, px, background) => {
+  await ready();
+  const image = new Resvg(svgText, {
+    fitTo: { mode: 'width', value: px },
+    background: background ?? 'rgba(0,0,0,0)',
+  }).render();
+  return image;
+};
+
+/**
+ * Decoded pixels for the safe-zone maths. resvg-wasm hands back the raster directly, so unlike
+ * the CLI - which has to read resvg's PNG back with node:zlib - there is nothing to decode.
+ */
+const renderRgba = async (svgText, px) => {
+  const image = await render(svgText, px, null);
+  const rgba = image.pixels ?? new Uint8Array((await decodePng(image.asPng())).data.buffer);
+  return { width: image.width, height: image.height, rgba };
+};
+
+/**
+ * Quantise, then recompress - the order matters for the same reason it does in the CLI: the
+ * quantiser re-encodes from scratch, so anything done before it is discarded.
+ *
+ * Two candidates, smaller wins: the quantised one and the untouched one. The CLI runs three
+ * (it also has Floyd-Steinberg), but image-q's dithering is not pngquant's and adding a third
+ * arm here would imply a correspondence that does not exist.
+ */
+const encodeRaster = async (image, colors) => {
+  const width = image.width, height = image.height;
+  const rgba = image.pixels ?? new Uint8Array((await decodePng(image.asPng())).data.buffer);
+
+  const lossless = new Uint8Array(await oxipng(image.asPng(), OXIPNG));
+
+  let quantised = null;
+  try {
+    const point = utils.PointContainer.fromUint8Array(rgba, width, height);
+    // "pngquant" here names image-q's colour-distance formula, not the program: it is image-q's
+    // closest approximation, and it is still a different quantiser.
+    const palette = await buildPalette([point], {
+      colors, colorDistanceFormula: 'pngquant', paletteQuantization: 'wuquant',
+    });
+    const applied = await applyPalette(point, palette, { colorDistanceFormula: 'pngquant' });
+    const out = applied.toUint8Array();
+    const png = await encodePng(new ImageData(
+      new Uint8ClampedArray(out.buffer, out.byteOffset, out.byteLength), width, height));
+    quantised = new Uint8Array(await oxipng(png, OXIPNG));
+  } catch {
+    // A mark with fewer distinct colours than the palette can make the quantiser unhappy; the
+    // lossless arm is already a complete answer, exactly as pngquant's exit 98 is in the CLI.
+  }
+
+  // Strictly smaller wins, so a tie keeps the quantised one - the same tie-break as the CLI.
+  return quantised && quantised.length < lossless.length ? quantised : lossless;
+};
+
+/**
+ * Build the set. Returns { files: [{name, bytes}], links, animated, fit } and never touches the
+ * network beyond the WASM modules themselves.
+ */
+export async function buildInBrowser(svgText, options = {}) {
+  const colors = Number(options.colors ?? DEFAULT_COLORS);
+  const sizes = options.sizes ?? DEFAULT_SIZES;
+  const bg = options.bg === 'none' ? null : (options.bg ?? DEFAULT_BG);
+  const vars = options.vars ?? {};
+  const wantManifest = options.manifest !== false;
+
+  if (!/<svg[\s>]/i.test(svgText)) {
+    throw new FavconError('not an SVG (no <svg> element found)');
+  }
+
+  // Exactly the CLI's order: the icon pass first, so a var() used only by an animation cannot
+  // fail a build that discards it, and so the logo pass's error can name --no-animation.
+  const iconOut = optimiseSvg(svgText, { icon: true, vars });
+  const animated = options.animation !== false && iconOut.stripped > 0;
+  const logoData = animated ? optimiseSvg(svgText, { icon: false, vars }).data : iconOut.data;
+
+  const squared = squareIconSvg(iconOut.data);
+  const iconData = squared.data;
+
+  const files = [
+    { name: 'logo.svg', bytes: new TextEncoder().encode(logoData) },
+    { name: 'icon.svg', bytes: new TextEncoder().encode(iconData) },
+  ];
+
+  // The masked icons, placed by the shared maths so the mark sits where the CLI would put it.
+  const place = async (canvas) => {
+    const { svg, ...where } = await placeInSafeZone(iconData, renderRgba, canvas);
+    return { svg, fit: { ...where, canvas } };
+  };
+  const apple = await place(APPLE_SIZE);
+  files.push({
+    name: 'apple-touch-icon.png',
+    bytes: await encodeRaster(await render(apple.svg, APPLE_SIZE, bg ?? undefined), colors),
+  });
+
+  let maskable = null;
+  if (bg !== null) {
+    maskable = await place(MASKABLE_SIZE);
+    files.push({
+      name: `icon-maskable-${MASKABLE_SIZE}.png`,
+      bytes: await encodeRaster(await render(maskable.svg, MASKABLE_SIZE, bg), colors),
+    });
+  }
+
+  // The transparent "any" icons, and the ICO payload. One render per distinct size, so asking
+  // for 32 gives icon-32.png and the ICO the same bytes - true by construction, as in the CLI.
+  const rasters = new Map();
+  const at = async (px) => {
+    if (!rasters.has(px)) rasters.set(px, await encodeRaster(await render(iconData, px, null), colors));
+    return rasters.get(px);
+  };
+  for (const s of sizes) files.push({ name: `icon-${s}.png`, bytes: await at(s) });
+  files.push({ name: 'favicon.ico', bytes: icoWrap(await at(ICO_SIZE), ICO_SIZE) });
+
+  if (wantManifest) {
+    files.push({
+      name: 'site.webmanifest',
+      bytes: new TextEncoder().encode(manifestJson({ sizes, maskable: Boolean(maskable) })),
+    });
+  }
+
+  // Emitted in the CLI's order, so the two summaries read the same way.
+  const order = ['logo.svg', 'icon.svg', 'favicon.ico', 'apple-touch-icon.png',
+                 ...sizes.map((s) => `icon-${s}.png`),
+                 `icon-maskable-${MASKABLE_SIZE}.png`, 'site.webmanifest'];
+  files.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+
+  return {
+    files,
+    animated,
+    fit: { apple: apple.fit, maskable: maskable?.fit ?? null },
+    links: linkTags('/', wantManifest),
+    archive: () => zip(files),
+  };
+}

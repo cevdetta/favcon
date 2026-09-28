@@ -55,11 +55,16 @@ export async function reference(resvgPath, { source, px, bg, vars, fitted = fals
     const src = join(dir, 'ref.svg'), out = join(dir, 'ref.png');
     if (fitted) {
       let n = 0;
+      // placeInSafeZone takes DECODED pixels, so that the website can hand it the output of a
+      // WASM codec without carrying Node's PNG reader. The reference path decodes with the
+      // suite's own reader - deliberately a different one from favcon's, so a bug in either
+      // cannot cancel itself out here.
       const render = async (text, size) => {
         const f = join(dir, `place-${n}.svg`), p = join(dir, `place-${n++}.png`);
         writeFileSync(f, text);
         await execFileAsync(resvgPath, ['--quiet', '-w', String(size), '-h', String(size), f, p]);
-        return readFileSync(p);
+        const img = decode(readFileSync(p));
+        return { width: img.width, height: img.height, rgba: img.data };
       };
       svg = (await placeInSafeZone(svg, render, px)).svg;
     }
