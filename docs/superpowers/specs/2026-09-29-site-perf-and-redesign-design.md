@@ -60,20 +60,24 @@ times do not (10 s here vs 72 s reported).
 - Validation (padding, even sizes) stays where it is and throws before
   any WASM loads, in both threads.
 
-### 3. Page rebuild (`site/src/pages/index.astro` + CSS)
+### 3. Page rebuild — mostly landed; remainder below
 
-- Semantic elements: `<form>` + `<fieldset>`/`<legend>` for options, a
-  real `<label>`-wrapped file input (drag-and-drop kept via JS on the
-  form), `<output>` for status/results, `<progress>` for the build. Most
-  ARIA and keyboard handling deletes itself. Keep: colors/sizes/bg/
-  padding/animation controls with current defaults and meanings.
+Since this spec was approved, the page has been rebuilt in the working
+tree (uncommitted): semantic `<form>` + `<fieldset>`-style labels, a real
+file input covering the drop zone, `<output>` status, `src/styles/app.css`
+(shrunk, inlined via `inlineStylesheets: 'always'`), a `warm()` preload on
+file select, and `pattern` validation on the inputs. The plan builds on
+that state — it does not redo it. What remains for the page:
+
 - **Per-platform previews from already-built files** (no extra renders):
   iOS squircle (~22.4 % radius), Android circle, desktop tile with no
   mask (shows the padding cost honestly), plus the existing on-white /
   on-dark SVG views. Preview source is the largest built icon.
+- **`<progress>` element** wired to `onProgress` (Task 2's worker work),
+  keeping the existing `<output>` status line and its messages.
 - Byte table re-measured after the fast paths (both columns); prose
   claims stay qualitative ("a few percent", "more than doubles") only if
-  still true.
+  still true. Controls keep current defaults and meanings.
 
 ## Interfaces
 
