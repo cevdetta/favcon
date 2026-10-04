@@ -45,9 +45,9 @@ favcon is a small orchestrator around three binaries it does not bundle. You nee
 | **pngquant** | `brew install pngquant` | `apt install pngquant` | `pacman -S pngquant` | [pngquant.org](https://pngquant.org) |
 
 pngquant is also an `optionalDependency` (`pngquant-bin`), so on a platform it has a prebuilt
-for you may already have it. It has no `linux/arm64` or `darwin/arm64` build and its install
-chain is elderly, which is exactly why it is optional: a failed install is a warning, not a
-broken `npm i`.
+for you may already have it. It has no `linux/arm64` build and its install chain is elderly,
+which is exactly why it is optional: a failed install is a warning, not a broken `npm i`. (Its
+macOS binary is universal, so Apple Silicon is covered.)
 
 If favcon cannot find something, it says so — all of them at once, with the install lines.
 `FAVCON_RESVG`, `FAVCON_PNGQUANT` and `FAVCON_OXIPNG` point it at a binary directly.
@@ -76,19 +76,22 @@ ICO can use. `logo.svg` is the mark, animation and all, for the places that can 
 
 ## Why not one of the others
 
-There are several favicon generators on npm. None of them recompress, which is the whole
-point of this one — you can see it in their dependency trees: no quantiser, no zopfli, one
-encode and done.
+There are several favicon generators on npm. Most write whatever sharp's encoder produced; the
+two that quantise do it through sharp's libimagequant and stop there. None of them compares
+candidate encodings or recompresses with zopfli, which is the whole point of this one.
 
 | | weekly | dependencies |
 |---|---|---|
-| [`favicons`](https://www.npmjs.com/package/favicons) | ~388k | `sharp` `xml2js` `escape-html` |
-| [`astro-favicons`](https://www.npmjs.com/package/astro-favicons) | ~4.1k | `favilib` `ultrahtml` |
-| [`favgen`](https://www.npmjs.com/package/favgen) | ~5 | `svgo` `sharp` `is-svg` `to-ico` `commander` |
+| [`favicons`](https://www.npmjs.com/package/favicons) | ~573k | `sharp` `xml2js` `escape-html` |
+| [`@vite-pwa/assets-generator`](https://www.npmjs.com/package/@vite-pwa/assets-generator) | ~312k | `sharp` `sharp-ico` `cac` `consola` `picocolors` `unconfig` |
+| [`astro-favicons`](https://www.npmjs.com/package/astro-favicons) | ~5.7k | `favilib` `ultrahtml` |
+| [`favgen`](https://www.npmjs.com/package/favgen) | ~3 | `svgo` `sharp` `is-svg` `to-ico` `commander` |
 
-`favicons` is thorough — it will write you thirty files for platforms that stopped existing —
-and the PNGs are whatever sharp's encoder produced. `astro-favicons` wraps the same engine
-for Astro. `favgen` is a thinner wrapper around sharp.
+(Weekly downloads for 22–28 September 2026.) `favicons` is thorough — it will write you thirty
+files for platforms that stopped existing — and its PNGs are whatever sharp's encoder produced.
+`astro-favicons` wraps the same engine for Astro. `@vite-pwa/assets-generator` encodes at
+sharp's `quality: 60` and `favgen` at `colors: 64`: one quantised encode, no comparison, no
+zopfli.
 
 favcon does fewer files and more work on each: quantise, compare three candidate encodings,
 recompress the winner with zopfli, and check the result against the original with a pixel
@@ -278,7 +281,7 @@ middleware that splices before `</head>` and skips any page that already contain
 
 favcon **will not overwrite a `public/favicon.ico` it did not write itself.** Silently
 clobbering a hand-tuned ICO is the worst possible first impression, so the check is on
-content: delete the file, or point the integration elsewhere.
+content: delete or move the file, and favcon writes its own.
 
 ## How it decides
 
@@ -298,8 +301,9 @@ The short version, because these are the parts that look wrong until you know wh
 - **Zopfli runs once**, on the file that already won the lossy/lossless comparison. Running it
   on both sides costs three times as much for identical bytes.
 - **The rasters are built serially on purpose.** Zopfli is ~98 % of wall clock so overlapping
-  looked obvious — but oxipng already saturates the machine on a single file. Measured over
-  four interleaved repetitions: 13.80 s serial, 14.08 s concurrent.
+  looked obvious — but four jobs at once burn about 40 % more CPU for 1.6 % less wall clock
+  (22.06 s serial, 21.72 s concurrent, inside the run-to-run spread). The extra cores go into
+  contention, not work.
 
 ## Licence
 

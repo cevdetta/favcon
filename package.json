@@ -9,7 +9,7 @@
   "exports": {
     ".": "./bin/favcon.mjs",
     "./core": "./lib/core.mjs",
-    "./astro": "./astro/index.mjs",
+    "./astro": { "types": "./astro/index.d.ts", "default": "./astro/index.mjs" },
     "./astro/middleware": "./astro/middleware.mjs",
     "./astro/Head.astro": "./astro/Head.astro",
     "./package.json": "./package.json"
