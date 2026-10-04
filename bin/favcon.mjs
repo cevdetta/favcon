@@ -826,7 +826,7 @@ export async function cli(argv) {
 
 /**
  * True when this file is the program, false when it was imported. Not import.meta.main,
- * which lands well after the 22.12 engines floor. realpath on both sides so a symlinked
+ * which arrived in Node 24.2, after the 24.0 engines floor. realpath on both sides so a symlinked
  * bin (which is what npm installs) still matches.
  */
 const isEntryPoint = (url) => {
