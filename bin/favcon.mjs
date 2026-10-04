@@ -54,16 +54,17 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { builtinPlugins, optimize } from 'svgo';
 
 // The isomorphic half of favcon, shared verbatim with the website. lib/core.mjs explains why
 // it is a second file and what the three seams are.
 import {
-  createSvgStage, DEFAULT_BG, DEFAULT_COLORS, DEFAULT_SIZES, FAST_ZOPFLI_ITERATIONS, FavconError,
-  icoWrap, linkTags, maskableFit, nestForMask, normaliseVars, placeInSafeZone, ZOPFLI_ITERATIONS,
+  createSvgStage, DEFAULT_BG, FAST_ZOPFLI_ITERATIONS, FavconError,
+  icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZone, ZOPFLI_ITERATIONS,
 } from '../lib/core.mjs';
+import { checkConfig, defineConfig, normaliseOptions, resolveOptions } from '../lib/config.mjs';
 import { createEngine } from '../lib/engine.mjs';
 import { buildSet } from '../lib/pipeline.mjs';
 
@@ -75,6 +76,7 @@ export { FavconError, icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZo
 // plugin list, because the list lives in core rather than in either caller.
 const { optimiseSvg } = createSvgStage({ optimize, builtinPlugins });
 export { optimiseSvg };
+export { defineConfig };
 
 // The engine's libraries load on first use, inside build(), so a platform without a prebuilt
 // fails with a favcon: message, not an import-time stack trace.
@@ -119,61 +121,7 @@ const registerSweep = () => {
 // ============================================================== the options ==
 
 const normalise = (options) => {
-  const o = {
-    input: options.input,
-    out: options.out ?? '.',
-    colors: DEFAULT_COLORS,
-    sizes: [],
-    padding: 'auto',
-    bg: options.bg === undefined ? DEFAULT_BG : options.bg,
-    vars: normaliseVars(options.vars),
-    animation: options.animation !== false,
-    manifest: options.manifest ?? false,
-    base: options.base ?? '/',
-  };
-
-  // Decimal digits only. Number() would accept 0x10, 1e2 and 0b111, which would satisfy
-  // the range check while making the "clear message" contract a lie.
-  const rawColors = options.colors ?? DEFAULT_COLORS;
-  if (!/^\d+$/.test(String(rawColors))) throw new FavconError(`--colors must be an integer 2-256, got '${rawColors}'`);
-  o.colors = Number(rawColors);
-  if (o.colors < 2 || o.colors > 256) throw new FavconError('--colors must be an integer 2-256');
-
-  // 'auto' or a percentage per side. Capped at 45 because 50 leaves no mark at all, and a
-  // value that produces an empty icon should be a message rather than a blank PNG.
-  const rawPadding = options.padding ?? 'auto';
-  if (rawPadding === 'auto') {
-    o.padding = 'auto';
-  } else {
-    if (!/^\d+(\.\d+)?$/.test(String(rawPadding))) {
-      throw new FavconError(`--padding must be 'auto' or a percentage 0-45, got '${rawPadding}'`);
-    }
-    o.padding = Number(rawPadding);
-    if (o.padding < 0 || o.padding > 45) throw new FavconError("--padding must be 'auto' or a percentage 0-45");
-  }
-
-  const mode = options.mode ?? 'release';
-  if (mode !== 'release' && mode !== 'fast') throw new FavconError(`mode must be 'release' or 'fast', got '${mode}'`);
-  // zopfli: false is internal: the suite and bench skip the lossless recompression to save
-  // time, because it changes bytes and never pixels. Never a CLI flag.
-  o.iterations = options.zopfli === false ? 0 : mode === 'fast' ? FAST_ZOPFLI_ITERATIONS : ZOPFLI_ITERATIONS;
-
-  const rawSizes = options.sizes ?? DEFAULT_SIZES;
-  const list = Array.isArray(rawSizes) ? rawSizes : String(rawSizes).trim().split(/[\s,]+/).filter(Boolean);
-  for (const s of list) {
-    if (!/^\d+$/.test(String(s))) throw new FavconError(`--sizes takes pixel sizes, got '${s}'`);
-    const n = Number(s);
-    if (n < 1 || n > 8192) throw new FavconError(`--sizes takes pixel sizes 1-8192, got '${s}'`);
-    // Every size is placed in the safe zone, where the box is rounded down to an even pixel
-    // so the offset stays whole. An odd canvas cannot be placed that way, so it is a message
-    // here rather than an "internal error" from the placement maths later.
-    if (n % 2 !== 0) throw new FavconError(`--sizes takes even pixel sizes, got '${s}'`);
-    if (!o.sizes.includes(n)) o.sizes.push(n);         // 032 and 32 are the same render
-  }
-  if (o.sizes.length === 0) throw new FavconError('--sizes is empty');
-
-  if (o.bg === 'none') o.bg = null;
-
+  const o = normaliseOptions(options);
   if (!o.input) throw new FavconError('no input file given');
   if (!existsSync(o.input)) throw new FavconError(`no such file: ${o.input}`);
   if (!statSync(o.input).isFile()) throw new FavconError(`not a file: ${o.input}`);
@@ -244,6 +192,33 @@ export async function build(options = {}) {
   }
 }
 
+// ================================================================== config ==
+
+// The config file, by name, in the working directory: the project root for every host. No
+// flag points at another file, so the CLI's surface stays what it was.
+export const CONFIG_FILES = ['favcon.config.js', 'favcon.config.mjs', 'favcon.config.ts'];
+
+/**
+ * The first config file in `dir`, imported and checked, or an empty config when there is
+ * none. `ignored` names the other config files present, which the CLI warns about. A `.ts`
+ * file loads through Node's type stripping, which erases annotations and transforms nothing;
+ * when that fails, the message names the `.mjs` spelling that always loads.
+ */
+export const loadConfigFile = async (dir = process.cwd()) => {
+  const found = CONFIG_FILES.filter((f) => existsSync(join(dir, f)));
+  if (found.length === 0) return { config: {}, file: null, ignored: [] };
+  const [file, ...ignored] = found;
+  let mod;
+  try {
+    mod = await import(pathToFileURL(join(dir, file)).href);
+  } catch (e) {
+    const first = String(e?.message ?? e).split('\n')[0];
+    throw new FavconError(`${file} could not be loaded: ${first}` +
+      (file.endsWith('.ts') ? '\n       Node strips types but does not transform them; write favcon.config.mjs instead' : ''));
+  }
+  return { config: checkConfig(mod.default, file), file, ignored };
+};
+
 // ====================================================================== CLI ==
 
 const die = (msg) => { process.stderr.write(`${PROG}: ${msg}\n`); process.exit(1); };
@@ -281,6 +256,9 @@ Options:
 
 Long options also take --opt=value. Use -- to end options.
 
+Options may also come from favcon.config.js, .mjs or .ts in the working directory,
+which can set input, base and mode too; flags win over it.
+
 Outputs: logo.svg  icon.svg  favicon.ico  apple-touch-icon.png  icon-<size>.png
          [site.webmanifest]`;
 
@@ -292,9 +270,8 @@ const readVersion = () => {
 
 export async function cli(argv) {
   const opts = {
-    out: '.', colors: DEFAULT_COLORS, sizes: null, bg: DEFAULT_BG, vars: new Map(),
-    animation: true, manifest: false, html: false, quiet: false, bgGiven: false,
-    padding: 'auto',
+    out: undefined, colors: undefined, sizes: undefined, bg: undefined, padding: undefined,
+    vars: new Map(), animation: undefined, manifest: undefined, html: false, quiet: false,
   };
   let input = null;
 
@@ -320,7 +297,7 @@ export async function cli(argv) {
       case '-o': case '--out':   opts.out = need(); break;
       case '--colors':           opts.colors = need(); break;
       case '--sizes':            opts.sizes = need(); break;
-      case '--bg':               opts.bg = need(); opts.bgGiven = true; break;
+      case '--bg':               opts.bg = need(); break;
       case '--padding':          opts.padding = need(); break;
       case '--var': {
         const kv = need();
@@ -358,10 +335,20 @@ export async function cli(argv) {
     if (inline !== null && !consumed) die(`${flag} takes no argument, got '${flag}=${inline}'`);
   }
 
-  if (input === null) { process.stderr.write(USAGE + '\n'); process.exit(1); }
+  let loaded;
+  try { loaded = await loadConfigFile(); } catch (e) { die(e.message); }
+  for (const f of loaded.ignored) warn(`${f} ignored: ${loaded.file} is the config file in use`);
 
-  if (!opts.bgGiven) {
-    warn(`--bg not given, using ${opts.bg} for the padded icons ` +
+  const options = resolveOptions({}, loaded.config, {
+    input: input ?? undefined, out: opts.out, colors: opts.colors, sizes: opts.sizes, bg: opts.bg,
+    padding: opts.padding, vars: opts.vars.size ? opts.vars : undefined,
+    animation: opts.animation, manifest: opts.manifest,
+  });
+
+  if (options.input === undefined) { process.stderr.write(USAGE + '\n'); process.exit(1); }
+
+  if (options.bg === undefined) {
+    warn(`--bg not given, using ${DEFAULT_BG} for the padded icons ` +
          `(iOS composites transparent icons onto black)`);
   }
 
@@ -372,11 +359,7 @@ export async function cli(argv) {
 
   let result;
   try {
-    result = await build({
-      input, out: opts.out, colors: opts.colors, sizes: opts.sizes ?? DEFAULT_SIZES,
-      bg: opts.bg, vars: opts.vars, animation: opts.animation, manifest: opts.manifest,
-      padding: opts.padding, onWarn: warn,
-    });
+    result = await build({ ...options, onWarn: warn });
   } catch (e) {
     die(e.message);
   }
@@ -394,6 +377,10 @@ export async function cli(argv) {
       }
       process.stdout.write(`${f.padEnd(22)} ${String(result.bytes[f]).padStart(6)} B${note}\n`);
     }
+    const mode = options.mode ?? 'release';
+    process.stdout.write(mode === 'fast'
+      ? `fast build (zopfli at ${FAST_ZOPFLI_ITERATIONS} iterations; not the release bytes)\n`
+      : `release build (zopfli at ${ZOPFLI_ITERATIONS} iterations)\n`);
   }
   if (opts.html) process.stdout.write('\n' + result.links);
   return 0;
@@ -410,4 +397,9 @@ const isEntryPoint = (url) => {
   } catch { return false; }
 };
 
-if (isEntryPoint(import.meta.url)) await cli(process.argv.slice(2));
+// Not awaited: a config file may import defineConfig from this module, and a top-level await
+// here would keep the module evaluating while cli() imports that file, a cycle that never
+// settles.
+if (isEntryPoint(import.meta.url)) {
+  cli(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (e) => die(e?.message ?? String(e)));
+}
