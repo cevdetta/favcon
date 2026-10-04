@@ -21,6 +21,11 @@ icon-512.png             2055 B  mark at 408px of 512 in the safe zone
 (That is `test/fixtures/general.svg`, a two-colour mark, at the defaults. Your bytes depend on
 your mark — `node bench/bench.mjs` measures the whole corpus.)
 
+No install at all: **[favcon.cevdet.ch](https://favcon.cevdet.ch)** runs the same SVG stage in
+your browser, with nothing uploaded. Its SVGs are byte-identical to the CLI's; its PNGs come
+from WASM substitutes for the three binaries and land within a few percent of the CLI's, and
+the page shows the numbers.
+
 Add the links to your `<head>` — `favcon --html` prints them:
 
 ```html

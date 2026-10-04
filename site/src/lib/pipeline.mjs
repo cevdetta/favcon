@@ -39,6 +39,13 @@ const OXIPNG = { level: 6, interlace: false, optimiseAlpha: true };
 let wasmReady;
 const ready = () => (wasmReady ??= initWasm(fetch(resvgWasmUrl)));
 
+/**
+ * Start fetching and compiling the 2.4 MB resvg WASM before the first render asks for it, so
+ * the page can overlap it with the visitor choosing options. A failure is not swallowed: the
+ * rejected promise is what the first render awaits, and that is where it gets reported.
+ */
+export const warm = () => { ready().catch(() => {}); };
+
 /** resvg at px x px. icon.svg is always square by the time it gets here, so width is enough. */
 const render = async (svgText, px, background) => {
   await ready();

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- The Open Graph card. Rebuild site/public/og.png with the command in site/README.md. -->
+  <rect width="1200" height="630" fill="#25170d"/>
+  <g transform="translate(96 155) scale(0.625)">
+    <path fill="#a6560a" d="M32 32h128v128H32zm160 0h128v128H192zM32 192h128v128H32zm0 160h128v128H32zm160 0h128v128H192zm160 0h128v128H352z"/>
+    <path fill="#ca8a10" d="M352 32h128v128H352z"/>
+  </g>
+  <g font-family="Liberation Sans, DejaVu Sans, sans-serif" fill="#f4efe8">
+    <text x="470" y="300" font-size="112" font-weight="700" letter-spacing="-3">favcon</text>
+    <text x="474" y="372" font-size="40" fill="#d8c8b4">One SVG in, an optimised</text>
+    <text x="474" y="422" font-size="40" fill="#d8c8b4">favicon set out.</text>
+  </g>
+</svg>

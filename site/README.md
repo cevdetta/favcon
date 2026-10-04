@@ -7,6 +7,20 @@ this. Drop an SVG, get the set, nothing leaves the tab.
 pnpm install && pnpm --filter favcon-site dev   # from the repo root
 ```
 
+Deployed to <https://favcon.cevdet.ch> by Cloudflare Pages from `main` (settings in
+[RELEASING.md](../RELEASING.md)). `trailingSlash: 'never'` with `build.format: 'file'` serves
+slash-free URLs without a redirect; `404.astro` must exist, or Pages answers every unknown path
+with the home page and a 200.
+
+The site's own icons in `public/` are favcon's output for `public/logo.svg`. The Open Graph
+card is `src/og/og.svg`, rendered with the same three tools:
+
+```sh
+resvg src/og/og.svg /tmp/og.png
+pngquant --force --speed 1 --nofs --colors 16 --output /tmp/og-q.png /tmp/og.png
+oxipng -q -o max -s --zopfli -a --out public/og.png /tmp/og-q.png
+```
+
 ## What it shares with the CLI
 
 Everything in [`lib/core.mjs`](../lib/core.mjs), imported directly rather than copied — the four
@@ -45,7 +59,7 @@ and linking it would make this GPL-3 (see the licence note in `CLAUDE.md`).
 ## Verifying it
 
 ```sh
-npm run build
+pnpm build
 node test/cdp-check.mjs      # runs the real pipeline in headless Chromium over four fixtures
 ```
 
