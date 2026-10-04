@@ -5,9 +5,8 @@
 // rather than `magick`, so a shell suite fails on a fresh runner in a way that looks like a
 // favcon bug and is not. Everything here needs is IHDR arithmetic and one inflate.
 //
-// Adam7 is unsupported by design: nothing in the pipeline emits an interlaced PNG (oxipng
-// only writes one if asked), so supporting it would be untested code standing in for a
-// clear error.
+// Adam7 is unsupported by design: neither of the engine's encodes interlaces, so supporting
+// it would be untested code standing in for a clear error.
 
 import { deflateSync, inflateSync } from 'node:zlib';
 

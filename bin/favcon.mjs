@@ -101,7 +101,6 @@ export const engineVersions = () => ({
 
 const PROG = 'favcon';
 
-// =================================================================== the ICO ==
 // ================================================================== staging ==
 // Temp directories that must not outlive the process, even on a signal. build() cleans up in
 // its own finally; this is the belt to that pair of braces.
@@ -123,8 +122,6 @@ const normalise = (options) => {
   const o = {
     input: options.input,
     out: options.out ?? '.',
-    // Decimal digits only. Number() would accept 0x10, 1e2 and 0b111, which would satisfy
-    // the range check while making the "clear message" contract a lie.
     colors: DEFAULT_COLORS,
     sizes: [],
     padding: 'auto',
@@ -135,6 +132,8 @@ const normalise = (options) => {
     base: options.base ?? '/',
   };
 
+  // Decimal digits only. Number() would accept 0x10, 1e2 and 0b111, which would satisfy
+  // the range check while making the "clear message" contract a lie.
   const rawColors = options.colors ?? DEFAULT_COLORS;
   if (!/^\d+$/.test(String(rawColors))) throw new FavconError(`--colors must be an integer 2-256, got '${rawColors}'`);
   o.colors = Number(rawColors);
@@ -265,8 +264,9 @@ Options:
                     the set transparent and unpadded, declared "any" only.
       --padding P   How much of each masked icon is margin, as a percentage per side
                     (default: auto). \`auto\` measures the mark's own extent and snaps it to
-                    whole pixels, which is smaller and sharper than any fixed number - see
-                    docs/DECISIONS.md decision 20. Give a number to override it.
+                    whole pixels, which is smaller and sharper than any fixed number. Give
+                    a number to override it. Why: decisions 20 and 22 in
+                    https://github.com/cevdetta/favcon/blob/main/docs/DECISIONS.md
       --var N=V     Set a CSS custom property, e.g. --var c-primary=#0E7C68. Repeatable.
                     Without it, var(--x, fallback) resolves to its fallback, the way a
                     browser resolves an undefined property.
