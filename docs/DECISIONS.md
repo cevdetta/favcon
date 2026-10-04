@@ -350,3 +350,23 @@ spec lets a platform composite a transparent icon onto any colour, so the safe z
 nothing, and padding 32 px of tab furniture only makes the mark smaller. Unpadded,
 `icon-32.png` is the native render again — the ICO payload's twin, as it was before.
 
+### 23. Released through trusted publishing, so `provenance` is not set by hand
+
+§6 of `CLAUDE.md` specified `"publishConfig": {"access": "public", "provenance": true}` and a
+release workflow holding an `NPM_TOKEN`. Both changed before the first publish.
+
+**No token.** `release.yml` publishes through npm trusted publishing: the job's OIDC token is
+exchanged for a short-lived publish credential, so there is no long-lived secret to leak or
+rotate, and the version is **staged** (`npm stage publish`) rather than published — nothing is
+live until the maintainer approves it with 2FA. Provenance is attached automatically on that
+path; the flag adds nothing there.
+
+**The flag would break the first publish.** npm only lets a package configure a trusted
+publisher once the package exists, so 0.1.0 is published by hand (`RELEASING.md`). Provenance
+can only be generated inside a supported CI, and with `provenance: true` in `publishConfig` a
+publish from a laptop fails instead of proceeding. `publishConfig` is therefore
+`{"access": "public"}`, as in deadhead, which releases the same way.
+
+The job also installs with `--ignore-scripts`: it is the one job holding the OIDC token, so no
+dependency lifecycle script runs in it. pngquant comes from apt there, which is the version CI
+measures with anyway.

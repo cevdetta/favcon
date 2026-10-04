@@ -802,7 +802,11 @@ describe('rendering', { skip: skipNoTools }, () => {
 
 describe('the published tarball', () => {
   it('contains bin/ and astro/ and nothing from test, docs, bench or .github', () => {
-    const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: ROOT, encoding: 'utf8' });
+    // On Windows `npm` is npm.cmd, which Node refuses to spawn without a shell since the
+    // CVE-2024-27980 fix - so the Windows job would fail here with ENOENT. The arguments are
+    // constants, so the shell has nothing to misquote.
+    const raw = execFileSync('npm', ['pack', '--dry-run', '--json'],
+      { cwd: ROOT, encoding: 'utf8', shell: process.platform === 'win32' });
     // npm <= 11 prints an array of packages; npm 12 prints an object keyed by name.
     const parsed = JSON.parse(raw);
     const pkg = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
@@ -815,7 +819,7 @@ describe('the published tarball', () => {
     assert.ok(files.some((f) => f.startsWith('astro/')), 'astro/ is missing');
     assert.ok(files.includes('package.json') && files.includes('README.md'));
     for (const f of files) {
-      assert.ok(!/^(test|docs|bench|\.github)\//.test(f), `${f} must not ship`);
+      assert.ok(!/^(test|docs|bench|site|\.github)\//.test(f), `${f} must not ship`);
     }
   });
 });

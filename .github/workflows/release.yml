@@ -1,32 +1,103 @@
 name: Release
 
+# A pushed v* tag builds, tests and stages the package. Nothing reaches npm until the
+# maintainer approves the staged version with 2FA: `npm stage list`, then `npm stage approve`.
+# See RELEASING.md, including why 0.1.0 is published by hand.
+
 on:
   push:
     tags: ['v*']
 
-jobs:
-  publish:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      # Provenance. npm verifies the attestation against this workflow run, which is why the
-      # publish happens here and not from anyone's laptop.
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          registry-url: 'https://registry.npmjs.org'
+permissions: {}
 
-      - name: The tag and the version must agree
+# One release at a time, and never cancelled halfway through staging.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  RESVG_VERSION: '0.48.1'
+  OXIPNG_VERSION: '10.2.1'
+
+jobs:
+  stage:
+    # Pinned for the same reason as CI: the apt pngquant version changes output bytes.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # The trusted publisher on npmjs.com names this workflow and this environment.
+    environment: npm
+    permissions:
+      contents: write # gh release create
+      id-token: write # npm trusted publishing (OIDC); provenance follows from it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@24
+          install: false
+      # No dependency lifecycle scripts in the job that holds the OIDC token. pngquant then
+      # comes from apt below, which is also what CI measures with.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Tag matches package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test "v$(node -p "require('./package.json').version")" = "$TAG"
+
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y pngquant icoutils
+      - name: resvg and oxipng
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          [ "$tag" = "$pkg" ] || { echo "tag v$tag does not match package.json $pkg"; exit 1; }
+          curl -fsSL -o /tmp/resvg.tar.gz \
+            "https://github.com/linebender/resvg/releases/download/v${RESVG_VERSION}/resvg-linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/resvg.tar.gz -C /usr/local/bin resvg
+          curl -fsSL -o /tmp/oxipng.tar.gz \
+            "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          sudo tar -xzf /tmp/oxipng.tar.gz --strip-components=1 -C /usr/local/bin \
+            "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu/oxipng"
+          sudo chmod +x /usr/local/bin/resvg /usr/local/bin/oxipng
 
-      - run: npm ci --ignore-scripts
-      - run: npm publish
+      - run: pnpm test
+
+      # Pack once; the tarball that was listed is the one that is staged.
+      - name: Pack
+        run: |
+          set -euo pipefail
+          npm pack --json > pack.json
+          node -e "
+            const [pkg] = JSON.parse(require('node:fs').readFileSync('pack.json','utf8'));
+            const files = pkg.files.map(f => f.path);
+            if (!files.includes('lib/core.mjs')) { console.error('lib/core.mjs missing'); process.exit(1); }
+            console.log(pkg.filename, files.length + ' files');
+          "
+
+      # Node 24 ships npm 11: `stage` needs 11.15, OIDC 11.5.1. No token and no
+      # registry-url: trusted publishing exchanges this job's OIDC token. A version already on
+      # npm (0.1.0, published by hand before a trusted publisher could exist) is left alone;
+      # the release notes still follow.
+      - name: Stage
+        run: |
+          set -euo pipefail
+          npm --version
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on npm; not staging it"
+          else
+            npm stage publish "$name-$version.tgz" --access public
+          fi
+
+      - name: GitHub Release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # The section headed "## [X.Y.Z] - <date>", up to the next "## ", without the
+          # link references at the foot of the file.
+          awk -v v="## [${TAG#v}]" 'index($0, v)==1 {f=1;next} /^## /{f=0} /^\[[^]]+\]: /{next} f' CHANGELOG.md > notes.md
+          test -s notes.md
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md

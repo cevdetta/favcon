@@ -18,18 +18,18 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../dist', import.meta.url));
-const PATH = process.argv[2] ?? '/check/';
+const PATH = process.argv[2] ?? '/check';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.json': 'application/json', '.ico': 'image/x-icon' };
 
 const server = createServer((req, res) => {
-  let p = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
-  let file = join(ROOT, p);
-  try { if (statSync(file).isDirectory()) file = join(file, 'index.html'); } catch {}
-  try {
-    statSync(file);
-  } catch {
+  const p = normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  // Resolved the way Cloudflare Pages resolves it with build.format 'file': the path, then
+  // the path plus .html, then a directory's index.html.
+  const file = [join(ROOT, p), join(ROOT, `${p}.html`), join(ROOT, p, 'index.html')]
+    .find((f) => { try { return statSync(f).isFile(); } catch { return false; } });
+  if (!file) {
     res.writeHead(404).end('not found');
     return;
   }
@@ -41,7 +41,8 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 const profile = mkdtempSync(join(tmpdir(), 'favcon-cdp.'));
 const PORT = 9333 + (process.pid % 500);
-const chrome = spawn('chromium', [
+// CHROME names another Chromium-family binary: CI's runner image has `google-chrome`.
+const chrome = spawn(process.env.CHROME ?? 'chromium', [
   '--headless', '--disable-gpu', '--no-sandbox', '--mute-audio',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, base + PATH,
 ], { stdio: 'ignore' });

@@ -9,6 +9,8 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
 ### Added
 
 - **A website** (`site/`): favcon in the browser, client-side, nothing uploaded. Astro, with a
@@ -107,3 +109,6 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 - The `icotool` dependency. favcon writes the 22-byte ICO container itself, byte-identical to
   `icotool -c -r` on every fixture. `icoutils` is now only a test-time nicety.
+
+[Unreleased]: https://github.com/cevdetta/favcon/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cevdetta/favcon/releases/tag/v0.1.0

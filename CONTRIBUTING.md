@@ -80,7 +80,9 @@ favcon regressed.
 
 ## Releasing
 
-`npm version <patch|minor|major>`, push the tag, and `release.yml` publishes with provenance.
+Set the version in `package.json`, push a `v*` tag, and `release.yml` tests, packs and stages
+the tarball on npm; the maintainer approves it there with 2FA. [RELEASING.md](RELEASING.md) has
+the whole sequence, including the one-time setup and the hand-published first version.
 
 Byte-output changes — a bumped resvg, pngquant or oxipng, or any pipeline change — are
 **minor at minimum, never patch**. Downstream users diff these files into git, and a patch

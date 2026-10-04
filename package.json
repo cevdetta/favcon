@@ -37,8 +37,8 @@
     "favicon", "favicons", "icon", "svg", "astro-integration", "astro", "pwa",
     "apple-touch-icon", "webmanifest", "ico", "png", "optimisation", "cli"
   ],
-  "repository": { "type": "git", "url": "git+https://github.com/favcon/favcon.git" },
-  "bugs": { "url": "https://github.com/favcon/favcon/issues" },
-  "homepage": "https://github.com/favcon/favcon#readme",
-  "publishConfig": { "access": "public", "provenance": true }
+  "repository": { "type": "git", "url": "git+https://github.com/cevdetta/favcon.git" },
+  "bugs": { "url": "https://github.com/cevdetta/favcon/issues" },
+  "homepage": "https://favcon.cevdet.ch",
+  "publishConfig": { "access": "public" }
 }

@@ -239,7 +239,9 @@ favcon/
   CLI-only user must not be nagged about Astro.
 - `"keywords"` **must include `astro-integration`** — the token the Astro integrations directory
   indexes on.
-- `"publishConfig": {"access": "public", "provenance": true}`
+- `"publishConfig": {"access": "public"}` — provenance comes from trusted publishing, and the
+  explicit flag would fail the hand-published 0.1.0 (decision 23).
+- `"packageManager": "pnpm@…"`: one pnpm workspace (root + `site/`), one lockfile.
 - `"exports"`: `"."` → `bin/favcon.mjs`, `"./astro"`, `"./astro/middleware"`,
   `"./astro/Head.astro"`, `"./package.json"`.
 
@@ -442,7 +444,10 @@ external binaries; the full flag reference; the Astro section; and a short "how 
 
 ## 11. Release
 
-`npm version <patch|minor|major>` → push the tag → `release.yml` publishes from GitHub Actions with
-`permissions: {id-token: write}` for provenance. Keep `CHANGELOG.md` in Keep-a-Changelog form.
+Set the version in `package.json` → push a `v*` tag → `release.yml` tests, packs and **stages**
+the tarball through npm trusted publishing (OIDC, no token, `environment: npm`); the maintainer
+approves it with 2FA. 0.1.0 is published by hand, because a trusted publisher can only be
+configured for a package that exists. `RELEASING.md` has the sequence; decision 23 the reasons.
+Keep `CHANGELOG.md` in Keep-a-Changelog form.
 Byte-output changes — a bumped resvg, pngquant or oxipng, or any pipeline change — are **minor at
 minimum**, never patch: downstream users diff these files into git.
