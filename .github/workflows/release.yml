@@ -15,13 +15,9 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  RESVG_VERSION: '0.48.1'
-  OXIPNG_VERSION: '10.2.1'
-
 jobs:
   stage:
-    # Pinned for the same reason as CI: the apt pngquant version changes output bytes.
+    # Pinned for the same reason as CI.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # The trusted publisher on npmjs.com names this workflow and this environment.
@@ -37,8 +33,8 @@ jobs:
         with:
           runtime: node@24
           install: false
-      # No dependency lifecycle scripts in the job that holds the OIDC token. pngquant then
-      # comes from apt below, which is also what CI measures with.
+      # No dependency lifecycle scripts in the job that holds the OIDC token. The engine
+      # needs none: its platform binary arrives as an optional dependency.
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Tag matches package.json
@@ -47,18 +43,14 @@ jobs:
         run: test "v$(node -p "require('./package.json').version")" = "$TAG"
 
       - name: System packages
-        run: sudo apt-get update && sudo apt-get install -y pngquant icoutils
-      - name: resvg and oxipng
+        run: sudo apt-get update && sudo apt-get install -y icoutils
+      - name: resvg (the reference the engine's render test compares against)
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/resvg.tar.gz \
-            "https://github.com/linebender/resvg/releases/download/v${RESVG_VERSION}/resvg-linux-x86_64.tar.gz"
+            "https://github.com/linebender/resvg/releases/download/v0.48.1/resvg-linux-x86_64.tar.gz"
           sudo tar -xzf /tmp/resvg.tar.gz -C /usr/local/bin resvg
-          curl -fsSL -o /tmp/oxipng.tar.gz \
-            "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          sudo tar -xzf /tmp/oxipng.tar.gz --strip-components=1 -C /usr/local/bin \
-            "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu/oxipng"
-          sudo chmod +x /usr/local/bin/resvg /usr/local/bin/oxipng
+          sudo chmod +x /usr/local/bin/resvg
 
       - run: pnpm test
 

@@ -12,17 +12,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The tool shells out to three binaries whose versions change its output bytes, so the
-# versions are pinned here rather than resolved. An unpinned toolchain turns "did this commit
-# change the output?" into a question CI cannot answer.
-env:
-  RESVG_VERSION: '0.48.1'
-  OXIPNG_VERSION: '10.2.1'
-
 jobs:
   linux:
-    # NEVER ubuntu-latest. An image flip changes the apt pngquant version, with no notice,
-    # and with it the output bytes; the failure would look like a favcon regression.
+    # Pinned, not ubuntu-latest, so an image flip never arrives inside an unrelated change.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -43,31 +35,27 @@ jobs:
       # icoutils is here for one reason: so the ICO-equivalence test runs instead of skipping.
       # It is not a dependency of the tool; favcon writes the 22-byte container itself.
       - name: System packages
-        run: sudo apt-get update && sudo apt-get install -y pngquant icoutils
+        run: sudo apt-get update && sudo apt-get install -y icoutils
 
-      # Pinned release tarballs, not `cargo install`: cargo takes 2-5 minutes per tool and
-      # builds whatever the current crate resolves to. These land in seconds and are the
-      # same binaries the measurements in docs/BENCHMARKS.md were taken with.
-      - name: resvg and oxipng
+      # A pinned release tarball, not `cargo install`, which takes minutes. The engine's
+      # render test compares against this binary, the same resvg the engine bundles.
+      - name: resvg (the reference the engine's render test compares against)
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/resvg.tar.gz \
-            "https://github.com/linebender/resvg/releases/download/v${RESVG_VERSION}/resvg-linux-x86_64.tar.gz"
+            "https://github.com/linebender/resvg/releases/download/v0.48.1/resvg-linux-x86_64.tar.gz"
           sudo tar -xzf /tmp/resvg.tar.gz -C /usr/local/bin resvg
-          curl -fsSL -o /tmp/oxipng.tar.gz \
-            "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          sudo tar -xzf /tmp/oxipng.tar.gz --strip-components=1 -C /usr/local/bin \
-            "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu/oxipng"
-          sudo chmod +x /usr/local/bin/resvg /usr/local/bin/oxipng
-
-      - name: Tool versions
-        run: node --version && resvg --version && oxipng --version && pngquant --version && icotool --version | head -1
+          sudo chmod +x /usr/local/bin/resvg
 
       - run: pnpm test
+      - run: node test/hashes.mjs > hashes-linux.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hashes-linux
+          path: hashes-linux.txt
 
   macos:
-    # Apple Silicon, with brew's resvg and oxipng. pngquant-bin's macOS binary is universal, so
-    # the resolver takes it before brew's pngquant. This job proves that tier on arm64.
+    # Apple Silicon: the engine's darwin-arm64 binary, the whole suite.
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -78,15 +66,15 @@ jobs:
         with:
           runtime: node@24
           require-lockfile: true
-      - run: brew install resvg oxipng pngquant
       - run: pnpm test
+      - run: node test/hashes.mjs > hashes-macos.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hashes-macos
+          path: hashes-macos.txt
 
   windows:
-    # A smoke job, not a full one. Upstream stopped shipping resvg-win64.zip after v0.47.0,
-    # so the only route to a Windows rasteriser is a cached `cargo install`, and that can wait.
-    # Everything that needs no rasteriser still runs here: argument parsing, the PATH
-    # resolver, both svgo passes, the ICO writer and the option validator. The suite skips
-    # the binary-dependent groups by itself when the tools are missing.
+    # The whole suite: nothing needs installing.
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -98,6 +86,26 @@ jobs:
           runtime: node@24
           require-lockfile: true
       - run: pnpm test
+      # bash, not PowerShell: the file must hold the bytes the script printed, LF endings
+      # included, or the comparison below fails on line endings alone.
+      - run: node test/hashes.mjs > hashes-windows.txt
+        shell: bash
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hashes-windows
+          path: hashes-windows.txt
+
+  same-bytes:
+    # The engine's claim: one SVG gives the same bytes on every platform.
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: hashes-*
+          merge-multiple: true
+      - run: diff hashes-linux.txt hashes-macos.txt && diff hashes-linux.txt hashes-windows.txt
 
   site:
     # The website imports lib/core.mjs by path, so a change to the shared half can break it

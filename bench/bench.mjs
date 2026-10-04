@@ -10,19 +10,17 @@
 // tool; it exists so that "every pipeline change arrives with a number" is a command rather
 // than an aspiration.
 
-import { execFile } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
-import { build, icoWrap, toolPath, toolVersions } from '../bin/favcon.mjs';
+import { build, engineVersions, icoWrap } from '../bin/favcon.mjs';
 import { DEFAULT_COLORS } from '../lib/core.mjs';
 import { reference, score } from '../test/lib/accuracy.mjs';
 import { decode } from '../test/lib/png.mjs';
+import { nativeVersions, run } from './native.mjs';
 
-const execFileAsync = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(HERE);
 const FIXTURES = join(ROOT, 'test', 'fixtures');
@@ -41,9 +39,6 @@ const CHECKS = [
 const size = (p) => statSync(p).size;
 const pad = (s, n) => String(s).padEnd(n);
 const num = (s, n) => String(s).padStart(n);
-
-let TOOLS = {};
-const run = async (tool, args) => execFileAsync(TOOLS[tool], args, { maxBuffer: 1 << 22 });
 
 /** Raw, unquantised renders: the input to every sweep below. Rendered once. */
 const rawRenders = async () => {
@@ -69,7 +64,6 @@ const rawRenders = async () => {
 const sweeps = {};
 
 sweeps.accuracy = async () => {
-  const resvg = TOOLS.resvg;
   const cols = [8, 16, 32, 64, 256];
   const rows = [];
   let worst = { pct: 0 };
@@ -79,7 +73,7 @@ sweeps.accuracy = async () => {
       for (const c of cols) {
         const out = join(OUT, 'acc', `${m}-${c}-${label}`);
         await build({ input: join(FIXTURES, `${m}.svg`), out, sizes: [192, 512], colors: c, bg: '#000000', zopfli: false });
-        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
+        const ref = await reference({ source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(out, file))), ref);
         cells.push(s.pct);
         if (m !== 'gradient' && s.pct > worst.pct) worst = { pct: s.pct, at: `${m}@${label}`, colors: c };
@@ -97,7 +91,6 @@ sweeps.accuracy = async () => {
 };
 
 sweeps.colors = async () => {
-  const resvg = TOOLS.resvg;
   const out = [];
   for (const c of [4, 8, 16, 32, 64, 128, 256]) {
     let bytes = 0, worst = 0, at = '';
@@ -107,7 +100,7 @@ sweeps.colors = async () => {
       const r = await build({ input: join(FIXTURES, `${m}.svg`), out: dir, sizes: [192, 512], colors: c, bg: '#000000' });
       for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) bytes += r.bytes[f];
       for (const [label, px, file, bg, fitted] of CHECKS) {
-        const ref = await reference(resvg, { source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
+        const ref = await reference({ source: join(FIXTURES, `${m}.svg`), px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(dir, file))), ref);
         if (s.pct > worst) { worst = s.pct; at = `${m}@${label}`; }
       }
@@ -355,8 +348,8 @@ sweeps.ico = async () => {
     png += mine.length;
     try {
       const rp = join(dir, `${mark}-r.ico`), bp = join(dir, `${mark}-b.ico`);
-      await execFileAsync('icotool', ['-c', '-r', q, '-o', rp]);
-      await execFileAsync('icotool', ['-c', q, '-o', bp]);
+      await run('icotool', ['-c', '-r', q, '-o', rp]);
+      await run('icotool', ['-c', q, '-o', bp]);
       bmp += size(bp);
       checked++;
       if (Buffer.compare(mine, readFileSync(rp)) === 0) identical++;
@@ -369,6 +362,76 @@ sweeps.ico = async () => {
                     `BMP payload           ${bmp} B  (${(bmp / png).toFixed(1)}x)`,
                     `byte-identical to icotool -c -r   ${identical}/${checked}`,
                   ] : ['(icotool not installed: comparison skipped)'])].join('\n') };
+};
+
+// The native pipeline against the engine, on the same raw renders: what decision 26 rests on.
+sweeps.engine = async () => {
+  const { loadEngine } = await import('../bin/favcon.mjs');
+  const engine = await loadEngine();
+  const raws = await rawRenders();
+  const dir = join(OUT, 'engine');
+  mkdirSync(dir, { recursive: true });
+  let native = 0, napi = 0, worstNative = 0, worstNapi = 0;
+  for (const { mark, px, file } of raws) {
+    const raw = readFileSync(file);
+    // native: the old pipeline's three candidates, then zopfli on the winner
+    const cands = [];
+    for (const dither of ['--nofs', '--floyd=1']) {
+      const f = join(dir, `${mark}-${px}${dither}.png`);
+      try { await run('pngquant', ['--force', '--speed', '1', dither, '--colors', String(DEFAULT_COLORS), '--output', f, file]); }
+      catch (e) { if (e.code !== 98 && e.code !== 99) throw e; continue; }
+      await run('oxipng', ['-q', '-o', 'max', '-s', '-a', f]);
+      cands.push(f);
+    }
+    const l = join(dir, `${mark}-${px}-lossless.png`);
+    copyFileSync(file, l);
+    await run('oxipng', ['-q', '-o', 'max', '-s', '-a', l]);
+    cands.push(l);
+    let best = cands[0];
+    for (const c of cands) if (size(c) < size(best)) best = c;
+    await run('oxipng', ['-q', '-o', 'max', '-s', '--zopfli', '--zi', '120', '-a', best]);
+    native += size(best);
+    const enc = await engine.finish(await engine.encode(raw, { colors: DEFAULT_COLORS }), { iterations: 120 });
+    napi += enc.length;
+    worstNative = Math.max(worstNative, score(decode(readFileSync(best)), decode(raw)).pct);
+    worstNapi = Math.max(worstNapi, score(decode(Buffer.from(enc)), decode(raw)).pct);
+  }
+  return { title: 'Native pipeline against the engine',
+           note: `The same ${raws.length} raw renders, encoded at --colors ${DEFAULT_COLORS} with zopfli at 120 iterations by both. pct is against the raw render.`,
+           text: [`native   ${num(native, 7)} B   worst ${worstNative.toFixed(3)} %`,
+                  `engine   ${num(napi, 7)} B   worst ${worstNapi.toFixed(3)} %   (${((napi / native - 1) * 100).toFixed(1)} %)`].join('\n') };
+};
+
+// Decision 27: does finishing the jobs in parallel worker threads beat finishing them in turn?
+// WASM zopfli runs on one thread, unlike oxipng, so decision 13's reason may not hold.
+sweeps.parallel = async () => {
+  const { Worker } = await import('node:worker_threads');
+  const { loadEngine } = await import('../bin/favcon.mjs');
+  const engine = await loadEngine();
+  const raws = (await rawRenders()).filter((r) => r.mark === 'general');
+  const encs = await Promise.all(raws.map(async (r) => engine.encode(readFileSync(r.file), { colors: DEFAULT_COLORS })));
+  const worker = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    import('${new URL('../bin/favcon.mjs', import.meta.url).href}').then(async ({ loadEngine }) => {
+      const e = await loadEngine();
+      parentPort.postMessage((await e.finish(workerData, { iterations: 120 })).length);
+    });`;
+  const serial = [], parallel = [];
+  for (let rep = 0; rep < 3; rep++) {
+    let t = performance.now();
+    for (const enc of encs) await engine.finish(enc, { iterations: 120 });
+    serial.push((performance.now() - t) / 1000);
+    t = performance.now();
+    await Promise.all(encs.map((enc) => new Promise((ok, bad) => {
+      const w = new Worker(worker, { eval: true, workerData: enc });
+      w.once('message', ok); w.once('error', bad);
+    })));
+    parallel.push((performance.now() - t) / 1000);
+  }
+  const med = (a) => [...a].sort((x, y) => x - y)[1];
+  return { title: 'Finishing the jobs in turn against in parallel workers (decision 27)',
+           note: `general.svg, ${encs.length} files, zopfli at 120 iterations, 3 interleaved repetitions, median shown.`,
+           text: [`in turn     ${med(serial).toFixed(2)} s`, `in parallel ${med(parallel).toFixed(2)} s`].join('\n') };
 };
 
 // ------------------------------------------------------------------- main --
@@ -387,9 +450,7 @@ const main = async () => {
     process.exit(1);
   }
 
-  TOOLS = Object.fromEntries(await Promise.all(
-    ['resvg', 'pngquant', 'oxipng'].map(async (t) => [t, await toolPath(t)])));
-  const versions = await toolVersions();
+  const versions = { ...(await nativeVersions()), ...engineVersions() };
 
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
@@ -411,8 +472,8 @@ const main = async () => {
       `Measured over \`test/fixtures/\` on ${new Date().toISOString().slice(0, 10)}, with:`,
       '',
       '```',
-      ...Object.entries(versions).map(([k, v]) => `${k.padEnd(10)} ${v}`),
-      `node       ${process.version}`,
+      ...Object.entries(versions).map(([k, v]) => `${k.padEnd(15)} ${v}`),
+      `${'node'.padEnd(15)} ${process.version}`,
       '```',
       '',
       'These numbers come from the fixtures in this repository, which are not the 39-mark',

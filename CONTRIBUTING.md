@@ -4,8 +4,8 @@
 
 **Every pipeline change arrives with a number.**
 
-If a change touches the optimisation path (plugin list, plugin params, pngquant or oxipng
-flags, stage order, the ICO container), it comes with a `bench/bench.mjs` run showing the
+If a change touches the optimisation path (plugin list, plugin params, the engine's quantiser
+or zopfli settings, stage order, the ICO container), it comes with a `bench/bench.mjs` run showing the
 byte delta and proof that every fixture is still inside the accuracy bar. "Looks the same" is
 not evidence, and neither is a screenshot.
 
@@ -36,13 +36,13 @@ Two more traps this repo has already fallen into, both caught only by measuring:
 ## Setting up
 
 ```sh
-pnpm install                   # the root and site/, one workspace, one lockfile
-# plus the three binaries: see the README's install matrix
-resvg --version && pngquant --version && oxipng --version
+pnpm install                   # the whole setup: the root and site/, one workspace, one lockfile
 ```
 
-`icoutils` is optional. Installing it makes one more test run instead of skip: the one
-asserting favcon's 22-byte ICO writer is byte-identical to `icotool -c -r`.
+Three optional tools turn on more checks. `resvg` on PATH runs the render-fidelity test, which
+holds the engine to the resvg CLI pixel for pixel. `icotool` (from `icoutils`) runs the test
+asserting favcon's 22-byte ICO writer is byte-identical to `icotool -c -r`. `bench/` needs
+resvg, pngquant and oxipng for its native reference arm.
 
 ## Definition of done
 
@@ -70,7 +70,7 @@ asserting favcon's 22-byte ICO writer is byte-identical to `icotool -c -r`.
     `sizes="32x32"` on the ICO.
     Every opaque pixel of every padded icon lies inside the safe circle; a pixel-grid mark is
     snapped to whole pixels, a curved one keeps its exact fit.
-11. Re-running with identical inputs and identical tool versions produces byte-identical outputs.
+11. Re-running with identical inputs and identical engine versions produces byte-identical outputs.
 12. Temp files are removed on success **and** on failure; a failed run leaves any previous output
     set intact, and leaves no staging directory behind.
 13. `--colors` outside 2–256, a missing input, a non-SVG input and an unknown flag all fail with a
@@ -109,16 +109,18 @@ inlined to `fill=` attributes and `class="blink"` still on the element. `animate
 is the opposite case, where the same class is named both inside and outside the guard and
 inlining has to be switched off. Both directions are asserted; neither alone is enough.
 
-`heavy.svg` is also the tightest fixture in the suite, by design: at the default palette it
-sits around 0.8 % against a 1.0 % bar, on the 180 px apple icon. If it is the *only* thing
-that fails after a toolchain bump, that is the fixture doing its job. Run
+`heavy.svg` is also the tightest non-gradient fixture in the suite, by design: at the default
+palette it sits at 0.114 % on the 192 px icon, and at `--colors 8` at 0.70 % on the 180 px
+apple icon, against a 1.0 % bar. If it is the *only* thing that fails after an engine bump,
+that is the fixture doing its job. Run
 `node bench/bench.mjs accuracy` and compare against `docs/BENCHMARKS.md` before concluding
 favcon regressed.
 
 ## House style
 
-- `bin/favcon.mjs` stays **one file**. The Astro integration may import it; it must never
-  import the Astro integration.
+- `bin/favcon.mjs` holds what only the CLI does: options, staging, the atomic write. What the
+  website also runs lives in `lib/`, which imports nothing. The Astro integration may import
+  either; neither may import the Astro integration.
 - No new CLI flags without a stated user need. The surface is kept small on purpose.
 - Comments explain **why**, and cite the measurement. The code is dense in places because the
   obvious version is wrong, and a reader must be able to find out why without a git
@@ -131,6 +133,6 @@ Set the version in `package.json`, push a `v*` tag, and `release.yml` tests, pac
 the tarball on npm; the maintainer approves it there with 2FA. [RELEASING.md](RELEASING.md) has
 the whole sequence, including the one-time setup and the hand-published first version.
 
-Byte-output changes (a bumped resvg, pngquant or oxipng, or any pipeline change) are
+Byte-output changes (a bumped `@napi-rs/image` or `@gfx/zopfli`, or any pipeline change) are
 **minor at minimum, never patch**. Downstream users diff these files into git, and a patch
 release that rewrites six binaries is a nasty surprise in a review.

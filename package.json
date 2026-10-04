@@ -18,14 +18,13 @@
   "packageManager": "pnpm@12.3.4",
   "files": ["bin", "lib", "astro", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
-    "test": "node --test test/run.mjs",
+    "test": "node --test test/run.mjs test/engine.mjs test/pipeline.mjs",
     "bench": "node bench/bench.mjs"
   },
   "dependencies": {
+    "@gfx/zopfli": "1.0.15",
+    "@napi-rs/image": "1.15.0",
     "svgo": "^4.1.0"
-  },
-  "optionalDependencies": {
-    "pngquant-bin": "^9.0.0"
   },
   "peerDependencies": {
     "astro": "^7.3.5"

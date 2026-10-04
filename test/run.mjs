@@ -2,8 +2,8 @@
 //
 // Two rules this suite holds itself to:
 //
-//   * Assert SELF-CONSISTENCY, never golden bytes. apt's pngquant is 3.0.1 while a
-//     developer's may be 3.0.3, and they do not agree byte for byte. "Two runs with the
+//   * Assert SELF-CONSISTENCY, never golden bytes. An engine upgrade changes bytes on
+//     purpose, and a golden file would only record the last one. "Two runs with the
 //     same inputs and the same tools produce the same bytes" is the property that
 //     matters and it is true on every machine.
 //   * Build as few times as possible. Zopfli is ~98% of the wall clock, so the builds are
@@ -18,7 +18,7 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import { build, FavconError, icoWrap, optimiseSvg, toolPath } from '../bin/favcon.mjs';
+import { build, FavconError, icoWrap, optimiseSvg } from '../bin/favcon.mjs';
 import favconAstro from '../astro/index.mjs';
 import { reference, score, THRESHOLD_PCT } from './lib/accuracy.mjs';
 import { decode, encode, header } from './lib/png.mjs';
@@ -49,7 +49,9 @@ const cli = async (args, opts = {}) => {
 const builds = new Map();
 const buildOnce = (key, options) => {
   if (!builds.has(key)) {
-    const out = join(scratch, `build-${key}`);
+    // The key is a memo key, not a file name: JSON in it puts " and : into the path, which
+    // Windows refuses. A counter keeps the directory unique, the slug keeps it readable.
+    const out = join(scratch, `build-${builds.size}-${key.replace(/[^\w-]+/g, '_')}`);
     builds.set(key, build({ out, ...options }).then((r) => ({ ...r, out })));
   }
   return builds.get(key);
@@ -63,20 +65,10 @@ const haveIcotool = (() => {
   try { execFileSync('icotool', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; }
 })();
 
-// Everything that rasterises needs resvg, pngquant and oxipng. The Windows CI job has none
-// of them (upstream stopped shipping resvg-win64.zip after v0.47.0), so rather than a second
-// suite that drifts out of step, the binary-dependent groups skip themselves and what is
-// left (argument parsing, both svgo passes, the ICO writer, the option validator) is real
-// coverage that runs everywhere.
-const needsTools = await (async () => {
-  try { await toolPath('resvg'); await toolPath('pngquant'); await toolPath('oxipng'); return false; }
-  catch (e) { return e.message.split('\n')[0]; }
-})();
-const skipNoTools = needsTools ? `skipped: ${needsTools}` : false;
 
 // ---------------------------------------------------------------- 1, 2, 9 --
 
-describe('the output set', { skip: skipNoTools }, () => {
+describe('the output set', () => {
   it('produces exactly the promised files and nothing else', async () => {
     const { out } = await DEFAULT_BUILD();
     assert.deepEqual(readdirSync(out).sort(),
@@ -122,7 +114,7 @@ describe('the output set', { skip: skipNoTools }, () => {
 
 // ------------------------------------------------------------------- 3, 6 --
 
-describe('icon.svg is the conservative favicon', { skip: skipNoTools }, () => {
+describe('icon.svg is the conservative favicon', () => {
   const forbidden = [
     [/\srole=/, 'role'], [/\saria-/, 'aria-*'], [/\sclass=/, 'class'], [/\sstyle=/, 'style='],
     [/<style/, '<style>'], [/<defs/, '<defs'], [/var\(/, 'var('],
@@ -186,7 +178,7 @@ describe('icon.svg is the conservative favicon', { skip: skipNoTools }, () => {
 // ---------------------------------------------------------------- 4, 5, 13 --
 
 describe('custom properties', () => {
-  it('overrides the fallback, leaving no trace of it', { skip: skipNoTools }, async () => {
+  it('overrides the fallback, leaving no trace of it', async () => {
     const out = freshDir();
     await build({ input: fixture('general.svg'), out, sizes: [32], vars: { ground: '#123456' } });
     const svg = readFileSync(join(out, 'icon.svg'), 'utf8');
@@ -194,16 +186,14 @@ describe('custom properties', () => {
     assert.ok(!/1f3a5f/i.test(svg), 'the fallback value survived the override');
   });
 
-  it('accepts a name given with or without the leading dashes', { skip: skipNoTools }, async () => {
+  it('accepts a name given with or without the leading dashes', async () => {
     const a = freshDir(), b = freshDir();
     await build({ input: fixture('general.svg'), out: a, sizes: [32], vars: { ground: '#123456' } });
     await build({ input: fixture('general.svg'), out: b, sizes: [32], vars: { '--ground': '#123456' } });
     assert.equal(readFileSync(join(a, 'icon.svg'), 'utf8'), readFileSync(join(b, 'icon.svg'), 'utf8'));
   });
 
-  // The full CLI reports missing tools before it reads the input, so this run needs them. The
-  // rule itself needs no binary, and the svgo-stage group below checks it on every platform.
-  it('fails loudly on an unresolvable var() and writes nothing', { skip: skipNoTools }, async () => {
+  it('fails loudly on an unresolvable var() and writes nothing', async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '-o', out, fixture('unresolved.svg')]);
     assert.equal(r.code, 1);
@@ -216,7 +206,7 @@ describe('custom properties', () => {
 // -------------------------------------------------------------------- 7 --
 
 describe('the ICO container', () => {
-  it('starts 00 00 01 00 and holds a PNG', { skip: skipNoTools }, async () => {
+  it('starts 00 00 01 00 and holds a PNG', async () => {
     const { out } = await DEFAULT_BUILD();
     const ico = readFileSync(join(out, 'favicon.ico'));
     assert.deepEqual([...ico.subarray(0, 4)], [0, 0, 1, 0]);
@@ -250,7 +240,7 @@ describe('the ICO container', () => {
     assert.throws(() => icoWrap(Buffer.from('not a png'), 32), /not a PNG/);
   });
 
-  it('is byte-identical to icotool -c -r', { skip: skipNoTools || (haveIcotool ? false : 'icotool not installed') },
+  it('is byte-identical to icotool -c -r', { skip: haveIcotool ? false : 'icotool not installed' },
     async () => {
       const { out } = await DEFAULT_BUILD();
       const payload = join(scratch, 'payload.png');
@@ -264,9 +254,7 @@ describe('the ICO container', () => {
 
 // -------------------------------------------------------------------- 8 --
 
-describe('accuracy', { skip: skipNoTools }, () => {
-  let resvg;
-  before(async () => { resvg = await toolPath('resvg'); });
+describe('accuracy', () => {
 
   // Scored at the sizes favcon ships by default. The bar is a statement about those:
   // at 32 px a mark is 1024 pixels of which almost all are anti-aliasing edges, and no palette
@@ -300,7 +288,7 @@ describe('accuracy', { skip: skipNoTools }, () => {
       const { out } = await accuracyBuild(name);
       const source = fixture(`${name}.svg`);
       for (const [file, px, bg, fitted] of CHECKS) {
-        const ref = await reference(resvg, { source, px, bg, vars: {}, fitted });
+        const ref = await reference({ source, px, bg, vars: {}, fitted });
         const s = score(decode(readFileSync(join(out, file))), ref);
         assert.ok(s.pct <= THRESHOLD_PCT,
           `${name}/${file}: pct ${s.pct.toFixed(4)}% > ${THRESHOLD_PCT}% (rmse ${s.rmse.toFixed(2)})`);
@@ -319,7 +307,7 @@ describe('accuracy', { skip: skipNoTools }, () => {
         `the default palette is no longer 256 (${f} differs)`);
     }
     const { out } = await buildOnce('flat-8', { input: fixture('flat.svg'), sizes: [192], colors: 8, zopfli: false });
-    const ref = await reference(resvg, { source: fixture('flat.svg'), px: 180, bg: '#000000', vars: {}, fitted: true });
+    const ref = await reference({ source: fixture('flat.svg'), px: 180, bg: '#000000', vars: {}, fitted: true });
     const s = score(decode(readFileSync(join(out, 'apple-touch-icon.png'))), ref);
     assert.ok(s.pct > THRESHOLD_PCT,
       `flat at --colors 8 scored ${s.pct.toFixed(3)}%, inside the bar - decision 24's reason needs re-stating`);
@@ -329,7 +317,7 @@ describe('accuracy', { skip: skipNoTools }, () => {
     // This fixture is the counter-example the bar needs: four stops cannot be spent on 8
     // colours, and pretending otherwise would make the gate meaningless everywhere else.
     const source = fixture('gradient.svg');
-    const ref = await reference(resvg, { source, px: 192, bg: '#000000', vars: {}, fitted: true });
+    const ref = await reference({ source, px: 192, bg: '#000000', vars: {}, fitted: true });
     const at = async (colors) => {
       const { out } = await buildOnce(`grad-${colors}`,
         { input: source, sizes: [192], colors, zopfli: false });
@@ -341,7 +329,7 @@ describe('accuracy', { skip: skipNoTools }, () => {
 
   it('scores a padded icon against an identically padded reference', async () => {
     const { out } = await buildOnce('pad-20', { input: fixture('general.svg'), sizes: [192], padding: 20, zopfli: false });
-    const ref = await reference(resvg, { source: fixture('general.svg'), px: 192, bg: '#000000', fitted: true, padding: 20 });
+    const ref = await reference({ source: fixture('general.svg'), px: 192, bg: '#000000', fitted: true, padding: 20 });
     const s = score(decode(readFileSync(join(out, 'icon-192.png'))), ref);
     assert.ok(s.pct <= THRESHOLD_PCT, `pct ${s.pct.toFixed(4)}% - the reference is placed differently`);
   });
@@ -350,7 +338,7 @@ describe('accuracy', { skip: skipNoTools }, () => {
 // ------------------------------------------------------------------ 10, 15 --
 
 describe('optional outputs and option syntax', () => {
-  it('--manifest writes valid JSON with one entry per size', { skip: skipNoTools }, async () => {
+  it('--manifest writes valid JSON with one entry per size', async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '--manifest', '--sizes', '32 64', '-o', out, fixture('flat.svg')]);
     assert.equal(r.code, 0, r.stderr);
@@ -362,7 +350,7 @@ describe('optional outputs and option syntax', () => {
     for (const i of m.icons) assert.equal(i.type, 'image/png');
   });
 
-  it('manifest may be an object, merged in ahead of the icons', { skip: skipNoTools }, async () => {
+  it('manifest may be an object, merged in ahead of the icons', async () => {
     // The CLI writes icons only because a CLI cannot know the app's name. The API can be
     // told, which is what the Astro integration passes through.
     const out = freshDir();
@@ -375,7 +363,7 @@ describe('optional outputs and option syntax', () => {
     assert.deepEqual(m.icons.map((i) => i.sizes), ['32x32']);
   });
 
-  it('--html prints the link set with sizes="32x32" on the ICO', { skip: skipNoTools }, async () => {
+  it('--html prints the link set with sizes="32x32" on the ICO', async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '--html', '--sizes', '32', '-o', out, fixture('flat.svg')]);
     assert.equal(r.code, 0, r.stderr);
@@ -388,7 +376,7 @@ describe('optional outputs and option syntax', () => {
     assert.ok(!links.some((l) => l.includes('logo.svg')), 'logo.svg must not be linked');
   });
 
-  it('accepts --opt=value', { skip: skipNoTools }, async () => {
+  it('accepts --opt=value', async () => {
     const out = freshDir();
     const r = await cli([`--out=${out}`, '--bg=#fff', '--sizes=32', '--colors=16',
                          `--var=ground=#654321`, fixture('general.svg')]);
@@ -412,7 +400,7 @@ describe('optional outputs and option syntax', () => {
 
 // ------------------------------------------------------------ masked icons --
 
-describe('the masked icons', { skip: skipNoTools }, () => {
+describe('the masked icons', () => {
   const BG = '#123456';
   const MASKED = (name, extra = {}) =>
     buildOnce(`masked-${name}${JSON.stringify(extra)}`, { input: fixture(`${name}.svg`), sizes: [32, 512], bg: BG, zopfli: false, ...extra });
@@ -549,9 +537,8 @@ describe('the masked icons', { skip: skipNoTools }, () => {
 
   it('are inside the accuracy bar against references placed the same way', async () => {
     const { out } = await MASKED('general', { colors: 16 });
-    const resvg = await toolPath('resvg');
     for (const [file, px] of ICONS) {
-      const ref = await reference(resvg, { source: fixture('general.svg'), px, bg: BG, vars: {}, fitted: true });
+      const ref = await reference({ source: fixture('general.svg'), px, bg: BG, vars: {}, fitted: true });
       const s = score(decode(readFileSync(join(out, file))), ref);
       assert.ok(s.pct <= THRESHOLD_PCT, `${file}: pct ${s.pct.toFixed(4)}%`);
     }
@@ -601,7 +588,7 @@ describe('the masked icons', { skip: skipNoTools }, () => {
 
 // ------------------------------------------------------------------ 11, 12 --
 
-describe('determinism and atomicity', { skip: skipNoTools }, () => {
+describe('determinism and atomicity', () => {
   it('re-running with the same inputs produces the same bytes', async () => {
     const a = freshDir(), b = freshDir();
     const opts = { input: fixture('general.svg'), sizes: [32], bg: '#ffffff', manifest: true };
@@ -686,7 +673,7 @@ describe('bad input fails clearly', () => {
     assert.match(r.stderr, /^favcon: not an SVG \(no <svg> element found\): notsvg\.txt$/m);
   });
 
-  it('a translucent --bg, which would put alpha in icons declared maskable', { skip: skipNoTools }, async () => {
+  it('a translucent --bg, which would put alpha in icons declared maskable', async () => {
     for (const bg of ['transparent', '#ffffff80', 'rgba(0,0,0,0)']) {
       const out = freshDir();
       const r = await cli(['--bg', bg, fixture('flat.svg'), '-o', out]);
@@ -696,7 +683,7 @@ describe('bad input fails clearly', () => {
     }
   });
 
-  it('a --bg resvg will not take', { skip: skipNoTools }, async () => {
+  it('a --bg resvg will not take', async () => {
     const r = await cli(['--bg', 'nonered', fixture('flat.svg'), '-o', freshDir()]);
     assert.equal(r.code, 1);
     assert.match(r.stderr, /^favcon: --bg is not a colour resvg accepts: 'nonered'/m);
@@ -705,7 +692,7 @@ describe('bad input fails clearly', () => {
 
 // ---------------------------------------------------------------------- 14 --
 
-describe('animation lands in logo.svg and nowhere else', { skip: skipNoTools }, () => {
+describe('animation lands in logo.svg and nowhere else', () => {
   it('keeps the guard, resolves var() inside it, and every class is live', async () => {
     const { out } = await SMALL('animated');
     const logo = readFileSync(join(out, 'logo.svg'), 'utf8');
@@ -807,7 +794,7 @@ describe('animation lands in logo.svg and nowhere else', { skip: skipNoTools }, 
 
 // ------------------------------------------------------------------ 16, 17 --
 
-describe('rendering', { skip: skipNoTools }, () => {
+describe('rendering', () => {
   it('renders 32px twice: a padded icon-32.png and a separate ICO payload', async () => {
     // The inversion of the old de-duplication: icon-32.png is padded now and the ICO
     // payload is not, so one size needs two renders. --bg none is the exception that
@@ -886,7 +873,7 @@ describe('the published tarball', () => {
 });
 
 // ------------------------------------------------- the binary-free surface --
-// These run everywhere, including the Windows job that has no rasteriser.
+// These need no raster engine.
 
 describe('the svg stage on its own', () => {
   const read = (n) => readFileSync(fixture(`${n}.svg`), 'utf8');
@@ -1100,7 +1087,7 @@ describe('the astro integration', () => {
   });
 
   it('builds into public/ and hits the cache the second time',
-    { skip: skipNoTools }, async () => {
+    async () => {
       const root = freshDir();
       const s = stub(root);
       const integration = favconAstro({ input: 'logo.svg', sizes: [32] });
@@ -1119,7 +1106,7 @@ describe('the astro integration', () => {
       assert.deepEqual([...readFileSync(join(pub, 'favicon.ico'))], [...before]);
     });
 
-  it('puts config.base into the manifest\'s icon URLs, not only the links', { skip: skipNoTools }, async () => {
+  it('puts config.base into the manifest\'s icon URLs, not only the links', async () => {
     // The page linked /blog/site.webmanifest while the icons inside it pointed at /icon-32.png,
     // which 404s on any site deployed under a base path, and the PWA install fails with it.
     const root = freshDir();
@@ -1134,7 +1121,7 @@ describe('the astro integration', () => {
   });
 
   it('keeps going when public/ already holds exactly what it would write',
-    { skip: skipNoTools }, async () => {
+    async () => {
       // The clean-install case: node_modules/.cache is gone, so the stamp is gone, but the
       // files in public/ are still favcon's because the same input produces the same bytes.
       const root = freshDir();
@@ -1151,7 +1138,7 @@ describe('the astro integration', () => {
     });
 
   it('refuses to overwrite a favicon.ico it did not write',
-    { skip: skipNoTools }, async () => {
+    async () => {
       const root = freshDir();
       const s = stub(root);
       const integration = favconAstro({ input: 'logo.svg', sizes: [32] });

@@ -56,9 +56,9 @@ conflict, the bar wins, and decision 6 below turns on that.
 | 10 | **`--bg` defaults to opaque black**, with a stderr warning when it is not given, **validated by probing resvg** (a 1×1 render, ~3 ms) rather than by a colour table. | iOS composites transparent Home Screen icons onto **black**, so black is what the platform would have produced from a transparent icon anyway. The default now matches that instead of substituting white without a word, and the file is smaller for it (no tRNS, simpler palette). A mark drawn on a light ground wants `--bg '#fff'`, which is why the warning fires whenever the flag is absent. Probing means `rgb()`, `rgba()` and `hsl()` all work and the validator can never disagree with the renderer. A name list rejects `rgb()`, and a loose `/^[A-Za-z]+$/` accepts `nonered`. Applies to every padded icon (`apple-touch-icon.png` and each `icon-<size>.png`, decision 22); the ICO payload stays transparent. Corners stay square; the OS applies its own mask. |
 | 11 | **`--sizes` defaults to `192 512`.** *(Reversed. The original was `256 512`.)* | The documentation every browser is held to asks for both: web.dev's install criteria ("must include a 192px and a 512px icon", 2024-09-19), Chrome's Lighthouse installable-manifest doc (2024-04-16) and MDN's Making PWAs installable (2026-09-07). Desktop Chromium's code is looser: `installable_evaluator.cc` accepts one `any` icon of 144 px or more, and Chromium 152's `Page.getInstallabilityErrors` reported no error for a manifest with only a 512. That is one engine on one platform, with Android, Edge, Samsung Internet and Firefox untested, so the documented pair wins; the 192 costs 159 B on a flat mark. SVG cannot stand in for either: an SVG entry makes the Android WebAPK install fail ([crbug.com/40925759](https://issues.chromium.org/issues/40925759)). |
 | 12 | **The SVG is emitted twice: `logo.svg` keeps the animation, `icon.svg` never has it.** | Publishing the stripped copy costs nothing (it was already being built) and removes the one thing a single-file layout got wrong: a favicon `<link>` pointing at a file carrying `<style>`, `@keyframes` and classes that no rasteriser and no ICO can use. **Re-measured:** every raster is byte-identical between the default and `--no-animation` builds, and `icon.svg` is the smaller of the two on every fixture. |
-| 13 | **The rasters stay serial.** **Re-measured and confirmed, though not for the reason first given; see the note below the table.** | Zopfli is ~98 % of wall clock, so overlapping it looked obvious. It is not. Four interleaved reps each: **13.80 s serial vs 14.08 s concurrent**. A `-t` sweep (2/4/6/8/10/12/16) moved contention around without beating it. The concurrency first spent on the two svgo passes (0.894 s → 0.456 s) is gone, though not for the reason first recorded: see decision 1. Importing svgo replaced two ~180 ms concurrent spawns with one 309 ms import. The `--bg` probe is still overlapped, because it is a real spawn. |
+| 13 | **The rasters stay serial.** **Scope:** this measures the native pipeline in `bench/`. The engine's version is decision 27. **Re-measured and confirmed, though not for the reason first given; see the note below the table.** | Zopfli is ~98 % of wall clock, so overlapping it looked obvious. It is not. Four interleaved reps each: **13.80 s serial vs 14.08 s concurrent**. A `-t` sweep (2/4/6/8/10/12/16) moved contention around without beating it. The concurrency first spent on the two svgo passes (0.894 s → 0.456 s) is gone, though not for the reason first recorded: see decision 1. Importing svgo replaced two ~180 ms concurrent spawns with one 309 ms import. The `--bg` probe is still overlapped, because it is a real spawn. |
 | 14 | **One render per distinct (size, background).** | Since the set collapsed to one padded set, `--sizes 32` now renders twice: `(32, bg)` for `icon-32.png` and `(32, null)` for the ICO payload. Under `--bg none` the icon is unpadded too, so the two share one render and "the ICO payload is `icon-32.png`" holds again, by construction rather than by coincidence, as before. |
-| 15 | **External binaries: `resvg` and `oxipng` are documented installs; `pngquant-bin` is an `optionalDependency`; `svgo` is a real dependency.** | No npm package can deliver resvg or oxipng. `resvg-cli` uses `--fit-width`, not `-w`, and pins resvg 0.34 against the 0.48.1 favcon is measured with. `oxipng` on npm is 1.0.1 from 2021 (wrapping oxipng 4.0.3) and `oxipng-bin` wraps 8.0.0. **Neither has `--zi`**, so wiring them up would produce larger files with no error. |
+| 15 | **Superseded by decision 26:** favcon ships no binaries. **External binaries: `resvg` and `oxipng` are documented installs; `pngquant-bin` is an `optionalDependency`; `svgo` is a real dependency.** | No npm package can deliver resvg or oxipng. `resvg-cli` uses `--fit-width`, not `-w`, and pins resvg 0.34 against the 0.48.1 favcon is measured with. `oxipng` on npm is 1.0.1 from 2021 (wrapping oxipng 4.0.3) and `oxipng-bin` wraps 8.0.0. **Neither has `--zi`**, so wiring them up would produce larger files with no error. |
 
 
 ### Decision 13, re-measured: it holds, but the stated reason was wrong
@@ -103,6 +103,8 @@ These are new, and each one exists because something measured did not match what
 expected.
 
 ### 16. Tool resolution probes; finding a path is not enough
+
+> **Superseded by decision 26:** favcon spawns no tools, so there is nothing to resolve.
 
 A path on disk is not proof of a working tool. `pngquant-bin` installs
 `node_modules/.bin/pngquant` as a Node script that execs a binary its postinstall downloads in
@@ -436,3 +438,71 @@ so every PNG renders the light rules: a test builds `dark.svg` and the same mark
 deleted, and asserts the ICO, apple icon and padded icon are byte-identical. There is no dark
 PNG set: no platform asks a favicon PNG for a colour scheme.
 
+
+### 26. One engine: @napi-rs/image and @gfx/zopfli
+
+favcon needed three native binaries that no npm package delivers at the versions it was
+measured with (decision 15), so `npx favcon` failed on a fresh machine until the user installed
+them by hand, and the website ran a separate WASM substitute. One npm package now carries the
+whole raster stage, at those versions.
+
+The spike behind it (2026-10-04):
+
+| question | finding |
+|---|---|
+| One package for resvg, pngquant and oxipng? | `@napi-rs/image` (MIT, prebuilt for Linux, macOS and Windows on x64 and arm64, FreeBSD on x64, and more) bundles **resvg 0.48.1** and **oxipng 10.2.1**, the versions favcon pins. Its quantiser has been its own clean-room MIT code since 1.13.0; 1.12.x and earlier link the GPL-3 libimagequant. |
+| Render fidelity | `fromSvg` never renders below 1000 px. Wrapping the icon in an outer SVG with `scale(N/vbW N/vbH) translate(-vbX -vbY)` and cropping to N×N is **pixel-identical to `resvg -w N -h N`** on 40/40 files; rendering big and resizing fails the bar (10–38 % at 32 px). The suite asserts it on 24 renders wherever resvg is on PATH. |
+| Zopfli without a native build | napi's prebuilt leaves zopfli out. Re-deflating the winner's image data with `@gfx/zopfli` (WASM, Apache-2.0), keeping napi's row filters, lands within +0.21 % of oxipng's own zopfli, with identical decoded pixels on 80/80. |
+| Browser | `@napi-rs/image-wasm32-wasi` gives SHA-256-identical output to the native module, in a cross-origin-isolated page. |
+| Maintenance | `@napi-rs/image` has one active maintainer and past gaps of 6–14 months; `@gfx/zopfli` was last published in 2020. **Both are pinned to an exact version**, and the native pipeline stays runnable in `bench/native.mjs` as a measured fallback. |
+
+`node bench/bench.mjs engine` encodes the same 50 raw renders (10 fixtures at 16, 32, 180, 192
+and 512 px) both ways, at 256 colours with zopfli at 120 iterations:
+
+| pipeline | bytes | worst pct, against the raw render |
+|---|---|---|
+| native: pngquant (two dithers) and oxipng, the smallest of three, then `--zopfli --zi 120` | 82 605 | 0.279 % |
+| engine: `pngQuantize` against `losslessCompressPng`, the smaller, then `@gfx/zopfli` | 79 614 (−3.6 %) | 0.035 % |
+
+The total hides a split, and the split is the trade this decision takes. The gradient is
+9.0 % smaller (32 586 B against 35 793 B). The nine other fixtures are 0.46 % larger together
+(47 028 B against 46 812 B), from −0.2 % on `smil.svg` to +3.4 % on `wide.svg`; built as
+shipped, placed at 180, 192 and 512 px, they come to 36 936 B against the native build's
+36 881 B, +0.15 %. Under the priority rule a byte cost needs a reason. Here it is a few dozen
+bytes on a flat mark, against no install step on any platform, one engine shared with the
+website, and a gradient that is 9 % smaller.
+
+It removes resvg, pngquant and oxipng as install steps, the PATH resolver of
+decision 16, `pngquant-bin`, the `FAVCON_RESVG`/`FAVCON_PNGQUANT`/`FAVCON_OXIPNG` overrides and
+the `toolPath()`/`toolVersions()` exports. `engineVersions()` takes their place in the Astro
+cache key. The native toolchain stays in `bench/native.mjs`, so every byte claim can still be
+checked against the pipeline the earlier decisions were measured on.
+
+The floor is `@napi-rs/image >= 1.13.0`, and the pin is exact: below 1.13.0 the package links
+GPL code, and any release can change output bytes. CI builds every fixture on Linux, macOS and
+Windows and fails if any file differs by a byte between them.
+
+### 27. The engine finishes the raster jobs one at a time
+
+Decision 13 kept the native rasters serial because oxipng spread one file across every core,
+so concurrent jobs only contended. The engine's zopfli is WASM and runs on one thread, which
+removes that reason, so the question was measured again before any worker pool was built.
+
+`node bench/bench.mjs parallel`: the five `general.svg` sizes (16, 32, 180, 192 and 512 px),
+encoded at 256 colours, then finished with zopfli at 120 iterations, once in turn and once with
+one worker thread per file. Three interleaved repetitions on a 16-core Ryzen 7 7840U, median
+shown:
+
+| arm | wall clock |
+|---|---|
+| in turn | 26.46 s |
+| one worker per file | 22.88 s (−13.5 %) |
+
+The bar for a worker pool was 20 %, and the numbers show why it cannot be reached. The 512 px
+file alone takes 22.88 s to finish, against 5.95 s for 180 px, 3.74 s for 192 px and under
+0.2 s for the two small sizes. A parallel build ends when its largest job ends, so the 512 px
+job is the floor whatever the core count, and the saving is capped at the other sizes' share.
+
+Rejected: finishing in turn is not slower by enough to justify a worker pool, its startup cost
+and the code that keeps its output order. The pipeline keeps one job at a time. A release build
+pays for the 512 px icon; `mode: 'fast'` (15 iterations) is the answer where that wait matters.

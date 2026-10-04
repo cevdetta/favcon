@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { build, FavconError, linkTags, toolVersions } from '../bin/favcon.mjs';
+import { build, engineVersions, FavconError, linkTags } from '../bin/favcon.mjs';
 
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
@@ -30,15 +30,14 @@ const basePrefix = (base) => (base && base !== '/' ? `/${base.replace(/^\/+|\/+$
 /**
  * The cache key, and the reason the cache is safe to trust.
  *
- * favcon's own version, the input bytes, the canonicalised options, and the --version
- * string of resvg, pngquant AND oxipng. That last part is what makes it correct and not
- * only fast: all three change their output bytes across releases, so a cache keyed only on
- * the SVG hands back stale files after a `brew upgrade`, with no sign and no end.
+ * favcon's own version, the input bytes, the canonicalised options, and the versions of
+ * @napi-rs/image and @gfx/zopfli, because both change output bytes across releases, so a
+ * cache keyed only on the SVG hands back stale files after an upgrade.
  */
-const cacheKey = async ({ version, source, options, tools }) => sha256(JSON.stringify({
+const cacheKey = async ({ version, source, options, engine }) => sha256(JSON.stringify({
   version,
   source: sha256(source),
-  tools,
+  engine,
   // Shape is canonicalised (sizes sorted, var names stripped of their leading dashes), but
   // DEFAULTS ARE NOT SUBSTITUTED. Writing favcon's defaults out here would mean two copies
   // of every default, and a cache that kept serving the old bytes, unnoticed, if one of them
@@ -54,7 +53,7 @@ const cacheKey = async ({ version, source, options, tools }) => sha256(JSON.stri
       .map(([k, v]) => [k.replace(/^--/, ''), String(v)]).sort()),
     animation: options.animation !== false,
     manifest: options.manifest ?? false,
-    zopfli: options.zopfli !== false,
+    mode: options.mode ?? 'release',
     // The manifest's bytes depend on it, so a changed base must not hit an old slot.
     base: options.base ?? '/',
   },
@@ -125,17 +124,16 @@ export default function favcon(options = {}) {
   /** One build, cache-first. `mode` is 'full' or 'fast'. */
   const runBuild = async (mode, logger) => {
     const source = await readFile(state.inputPath);
-    // The dev artefacts are NOT the production bytes, by design: one size, zopfli off.
-    // Zopfli is ~98 % of the wall clock, so this is under a second instead of ~30 s.
+    // The dev artefacts are not the production bytes, by design: one size, zopfli at 15 iterations.
     // base goes into the build, not only the links: the manifest's icon URLs carry it too,
     // and without it a site under /blog links /blog/site.webmanifest whose icons 404.
     const opts = mode === 'fast'
-      ? { ...buildOptions, base: state.base, sizes: [256], zopfli: false }
+      ? { ...buildOptions, base: state.base, sizes: [256], mode: 'fast' }
       : { ...buildOptions, base: state.base };
 
     const key = await cacheKey({
       version: JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version,
-      source, options: opts, tools: await toolVersions(),
+      source, options: opts, engine: engineVersions(),
     });
     const slot = join(state.cacheDir, key);
     const stampPath = join(state.cacheDir, 'written.json');
