@@ -207,6 +207,12 @@ At 180 px the same mark snaps from 116 to 112 px and the apple icon is 151 B.
 composites a transparent icon onto a colour of its own choosing, so the safe zone would mean
 nothing, and padding 32 px of tab furniture only makes the mark smaller.
 
+## Dark mode
+
+A source with a `@media (prefers-color-scheme: dark)` block keeps it in `icon.svg`, so the
+favicon follows the browser's colour scheme. The PNGs render the light rules, because resvg
+skips `@media`, and they are the same bytes a source without the block would produce.
+
 ## Animation
 
 Animation lands in `logo.svg` and nowhere else. Feed favcon an animated mark and you get a

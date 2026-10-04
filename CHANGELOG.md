@@ -115,6 +115,10 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   linked `/blog/site.webmanifest`, but the icons inside it pointed at `/icon-32.png` and
   404'd, so the PWA install failed. `base` now reaches the build and the cache key.
 
+- **A `prefers-color-scheme` block survives into `icon.svg`.** svgo inlined the class it
+  selects and then dropped the `@media` rule as unused, so a dark-mode favicon lost its dark
+  rules without a warning. The rasters render the light rules as before (decision 25).
+
 - **Non-square marks produced non-square rasters.** resvg does not stretch to fill `-w N -h N`:
   it preserves the aspect ratio and derives the second dimension, so a 128×64 mark came out
   32×16 and the ICO header disagreed with its own payload. `icon.svg` now carries a square

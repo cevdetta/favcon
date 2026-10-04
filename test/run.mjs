@@ -144,6 +144,35 @@ describe('icon.svg is the conservative favicon', { skip: skipNoTools }, () => {
     });
   }
 
+  it('keeps a prefers-color-scheme block, and only that, in icon.svg', async () => {
+    // A dark-mode rule is the usual reason to ship an SVG favicon: a dark mark disappears on a
+    // dark tab strip. inlineStyles used to consume the class and csso then dropped the @media
+    // as unused, with no warning. The one exception to "no <style>, no class" is this block
+    // and the classes it selects (decision 25).
+    const { out } = await SMALL('dark');
+    const svg = readFileSync(join(out, 'icon.svg'), 'utf8');
+    assert.match(svg, /@media[^{]*prefers-color-scheme:\s*dark/, `the dark block is gone\n${svg}`);
+    assert.match(svg, /#e8eef5/i, 'the dark fill is gone');
+    assert.equal((svg.match(/<style/g) ?? []).length, 1, 'more than one <style>');
+    for (const [re, what] of forbidden.filter(([, w]) => w !== '<style>' && w !== 'class')) {
+      assert.ok(!re.test(svg), `icon.svg has ${what}\n${svg}`);
+    }
+    const selected = new Set([...svg.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+    for (const m of svg.matchAll(/class="([^"]*)"/g)) {
+      for (const c of m[1].split(/\s+/)) assert.ok(selected.has(c), `class ${c} is selected by nothing`);
+    }
+  });
+
+  it('renders the dark-mode source exactly as the light one: resvg skips @media', async () => {
+    const light = join(scratch, 'dark-light.svg');
+    writeFileSync(light, readFileSync(fixture('dark.svg'), 'utf8').replace(/@media[^{]*\{[^}]*\{[^}]*\}\}/, ''));
+    const a = await SMALL('dark');
+    const b = await buildOnce('dark-light', { input: light, sizes: [32] });
+    for (const f of ['favicon.ico', 'apple-touch-icon.png', 'icon-32.png']) {
+      assert.deepEqual([...readFileSync(join(a.out, f))], [...readFileSync(join(b.out, f))], `${f} differs`);
+    }
+  });
+
   it('keeps a referenced id and drops an unreferenced one', async () => {
     const { out } = await SMALL('mask');
     const svg = readFileSync(join(out, 'icon.svg'), 'utf8');

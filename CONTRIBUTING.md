@@ -52,8 +52,10 @@ asserting favcon's 22-byte ICO writer is byte-identical to `icotool -c -r`.
    `icon-512.png`, and nothing else.
 2. Dimensions are exact: 180×180, 192×192, 512×512; the ICO reports a single 32×32 entry.
 3. `icon.svg`, in **every** mode (including a default build of an animated source), contains no
-   `role`, no `aria-*`, no `class`, no `style=`, no `<style>`, no `<defs`, no `var(`, and keeps
-   `xmlns` and `viewBox`.
+   `role`, no `aria-*`, no `class`, no `style=`, no `<style>`, no `<defs`, no `var(`, no
+   `<desc>`, no `<title>`, and keeps `xmlns` and `viewBox`. One exception: a source with a
+   `prefers-color-scheme` block keeps that block in one `<style>`, with the classes it selects
+   (decision 25).
 4. `--var name=value` overrides the fallback, and the old value is gone from the output.
 5. An unresolvable `var()` with no fallback fails with an error and a non-zero exit, and writes
    nothing.
