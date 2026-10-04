@@ -200,7 +200,7 @@ sweeps.zopfli = async () => {
   }
   const base = rows[0][1];
   return { title: 'Zopfli iterations',
-           note: 'The default is 15. Bytes ship forever and build time does not, so the knee is taken on the byte side, but the curve is flat past 120.',
+           note: "The baseline is 15, oxipng's default and the fast mode's count; release builds use 120. Bytes ship forever and build time does not, so the knee is taken on the byte side, but the curve is flat past 120.",
            text: [`${num('--zi', 6)}${num('bytes', 10)}${num('vs 15', 9)}${num('seconds', 10)}`,
              ...rows.map(([zi, b, s]) =>
                `${num(zi, 6)}${num(b, 10)}${num(((b / base - 1) * 100).toFixed(2) + '%', 9)}${num(s.toFixed(1), 10)}`)].join('\n') };

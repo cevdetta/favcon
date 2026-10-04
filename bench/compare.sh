@@ -8,7 +8,7 @@
 # configurations and a byte sweep:
 #
 #   A  defaults      what you actually get by typing the command. favcon defaults to
-#                    --colors 16 and the other two to 8, so this is a comparison of
+#                    --colors 256 and the other two to 8, so this is a comparison of
 #                    products, not of implementations.
 #   B  like-for-like --colors 8 --sizes "192 512" everywhere, which is the only way to
 #                    read the wall clock as a statement about the code.
