@@ -10,8 +10,8 @@ That is the whole quickstart. It writes six files, prints their sizes, and tells
 mark is animated.
 
 ```
-logo.svg                  289 B  static (no animation in the source)
-icon.svg                  289 B
+logo.svg                  202 B  static (no animation in the source)
+icon.svg                  202 B
 favicon.ico               463 B
 apple-touch-icon.png     1092 B  mark at 142px of 180 in the safe zone
 icon-192.png             1160 B  mark at 152px of 192 in the safe zone

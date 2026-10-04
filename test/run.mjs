@@ -126,6 +126,8 @@ describe('icon.svg is the conservative favicon', { skip: skipNoTools }, () => {
   const forbidden = [
     [/\srole=/, 'role'], [/\saria-/, 'aria-*'], [/\sclass=/, 'class'], [/\sstyle=/, 'style='],
     [/<style/, '<style>'], [/<defs/, '<defs'], [/var\(/, 'var('],
+    // A favicon has no reader for its text: <desc> and <title> are bytes no browser shows.
+    [/<desc/, '<desc>'], [/<title/, '<title>'],
   ];
 
   for (const [name, extra] of [
