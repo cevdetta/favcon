@@ -48,11 +48,16 @@ const chrome = spawn(process.env.CHROME ?? 'chromium', [
 ], { stdio: 'ignore' });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const finish = (code, ...msg) => {
-  try { chrome.kill(); } catch {}
-  server.close();
-  rmSync(profile, { recursive: true, force: true });
+// The verdict prints first and decides the exit code. Cleanup comes after, waits for Chromium to
+// exit (it writes to its profile while shutting down, so an immediate delete hits ENOTEMPTY),
+// retries, and can never turn a passing run into a failing one or hide the result.
+const finish = async (code, ...msg) => {
   for (const m of msg) if (m) console.log(m);
+  server.close();
+  const exited = new Promise((r) => chrome.once('exit', r));
+  try { chrome.kill(); } catch {}
+  await Promise.race([exited, sleep(5000)]);
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {}
   process.exit(code);
 };
 
@@ -64,7 +69,7 @@ for (let i = 0; i < 120 && !target; i++) {
     target = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
   } catch { /* still coming up */ }
 }
-if (!target) finish(1, 'could not reach the browser');
+if (!target) await finish(1, 'could not reach the browser');
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
@@ -108,6 +113,6 @@ for (let i = 0; i < 400; i++) {                 // up to ~60 s; the 2.4 MB resvg
   if (/(^|\n)(OK|FAIL)/.test(text)) break;
   await sleep(150);
 }
-finish(/(^|\n)OK$/.test(text.trim()) ? 0 : 1,
+await finish(/(^|\n)OK$/.test(text.trim()) ? 0 : 1,
        text || '(the page printed nothing)',
        noise.length ? '\n--- browser said ---\n' + noise.join('\n') : '');

@@ -170,7 +170,9 @@ describe('custom properties', () => {
     assert.equal(readFileSync(join(a, 'icon.svg'), 'utf8'), readFileSync(join(b, 'icon.svg'), 'utf8'));
   });
 
-  it('fails loudly on an unresolvable var() and writes nothing', async () => {
+  // The full CLI reports missing tools before it reads the input, so this run needs them. The
+  // rule itself is binary-free and is also checked at the svgo stage below.
+  it('fails loudly on an unresolvable var() and writes nothing', { skip: skipNoTools }, async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '-o', out, fixture('unresolved.svg')]);
     assert.equal(r.code, 1);
@@ -858,6 +860,14 @@ describe('the svg stage on its own', () => {
     const b = optimiseSvg(read('general'), { icon: true, vars: { ground: '#123456' } });
     assert.match(b.data, /#123456/);
     assert.ok(!/#1f3a5f/i.test(b.data));
+  });
+
+  it('throws FavconError on a var() with no fallback, in the icon pass', () => {
+    assert.throws(() => optimiseSvg(read('unresolved'), { icon: true }), (e) => {
+      assert.ok(e instanceof FavconError);
+      assert.match(e.message, /unresolved var\(--brand\)/);
+      return true;
+    });
   });
 
   it('throws FavconError, naming --no-animation only for the logo pass', () => {
