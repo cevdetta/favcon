@@ -436,3 +436,28 @@ so every PNG renders the light rules: a test builds `dark.svg` and the same mark
 deleted, and asserts the ICO, apple icon and padded icon are byte-identical. There is no dark
 PNG set: no platform asks a favicon PNG for a colour scheme.
 
+
+### 27. The engine finishes the raster jobs one at a time
+
+Decision 13 kept the native rasters serial because oxipng spread one file across every core,
+so concurrent jobs only contended. The engine's zopfli is WASM and runs on one thread, which
+removes that reason, so the question was measured again before any worker pool was built.
+
+`node bench/bench.mjs parallel`: the five `general.svg` sizes (16, 32, 180, 192 and 512 px),
+encoded at 256 colours, then finished with zopfli at 120 iterations, once in turn and once with
+one worker thread per file. Three interleaved repetitions on a 16-core Ryzen 7 7840U, median
+shown:
+
+| arm | wall clock |
+|---|---|
+| in turn | 26.46 s |
+| one worker per file | 22.88 s (−13.5 %) |
+
+The bar for a worker pool was 20 %, and the numbers show why it cannot be reached. The 512 px
+file alone takes 22.88 s to finish, against 5.95 s for 180 px, 3.74 s for 192 px and under
+0.2 s for the two small sizes. A parallel build ends when its largest job ends, so the 512 px
+job is the floor whatever the core count, and the saving is capped at the other sizes' share.
+
+Rejected: finishing in turn is not slower by enough to justify a worker pool, its startup cost
+and the code that keeps its output order. The pipeline keeps one job at a time. A release build
+pays for the 512 px icon; `mode: 'fast'` (15 iterations) is the answer where that wait matters.

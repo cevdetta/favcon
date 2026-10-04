@@ -23,8 +23,8 @@
 //   * Zopfli runs once, on the file that already won the lossy/lossless comparison.
 //     Running it on both sides costs three times as much for the same bytes.
 //   * The rasters are built one at a time. Decision 13 measured that on the native
-//     pipeline, where oxipng spread one file across every core; decision 27 measures it
-//     on the engine.
+//     pipeline, where oxipng spread one file across every core; decision 27 measured it
+//     again on the engine, where the largest job bounds any parallel build.
 //   * icon.svg is the rasteriser's input, not only an output. Animation never reaches a
 //     PNG, which makes "the rasters are the rest frame" a property of the pipeline
 //     rather than of resvg's CSS support.

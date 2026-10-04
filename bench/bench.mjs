@@ -402,6 +402,38 @@ sweeps.engine = async () => {
                   `engine   ${num(napi, 7)} B   worst ${worstNapi.toFixed(3)} %   (${((napi / native - 1) * 100).toFixed(1)} %)`].join('\n') };
 };
 
+// Decision 27: does finishing the jobs in parallel worker threads beat finishing them in turn?
+// WASM zopfli runs on one thread, unlike oxipng, so decision 13's reason may not hold.
+sweeps.parallel = async () => {
+  const { Worker } = await import('node:worker_threads');
+  const { loadEngine } = await import('../bin/favcon.mjs');
+  const engine = await loadEngine();
+  const raws = (await rawRenders()).filter((r) => r.mark === 'general');
+  const encs = await Promise.all(raws.map(async (r) => engine.encode(readFileSync(r.file), { colors: DEFAULT_COLORS })));
+  const worker = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    import('${new URL('../bin/favcon.mjs', import.meta.url).href}').then(async ({ loadEngine }) => {
+      const e = await loadEngine();
+      parentPort.postMessage((await e.finish(workerData, { iterations: 120 })).length);
+    });`;
+  const serial = [], parallel = [];
+  for (let rep = 0; rep < 3; rep++) {
+    let t = performance.now();
+    for (const enc of encs) await engine.finish(enc, { iterations: 120 });
+    serial.push((performance.now() - t) / 1000);
+    t = performance.now();
+    await Promise.all(encs.map((enc) => new Promise((ok, bad) => {
+      const w = new Worker(worker, { eval: true, workerData: enc });
+      w.once('message', ok); w.once('error', bad);
+    })));
+    parallel.push((performance.now() - t) / 1000);
+  }
+  const med = (a) => [...a].sort((x, y) => x - y)[1];
+  return { title: 'Finishing the jobs in turn against in parallel workers (decision 27)',
+           note: `general.svg, ${encs.length} files, zopfli at 120 iterations, 3 interleaved repetitions, median shown.`,
+           text: [`in turn     ${med(serial).toFixed(2)} s`, `in parallel ${med(parallel).toFixed(2)} s`].join('\n') };
+};
+
 // ------------------------------------------------------------------- main --
 
 const main = async () => {
