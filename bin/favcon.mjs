@@ -61,9 +61,10 @@ import { builtinPlugins, optimize } from 'svgo';
 // The isomorphic half of favcon, shared verbatim with the website. lib/core.mjs explains why
 // it is a second file and what the three seams are.
 import {
-  createSvgStage, DEFAULT_BG, DEFAULT_COLORS, DEFAULT_SIZES, FAST_ZOPFLI_ITERATIONS, FavconError,
-  icoWrap, linkTags, maskableFit, nestForMask, normaliseVars, placeInSafeZone, ZOPFLI_ITERATIONS,
+  createSvgStage, DEFAULT_BG, DEFAULT_COLORS, DEFAULT_SIZES, FavconError,
+  icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZone,
 } from '../lib/core.mjs';
+import { normaliseOptions } from '../lib/config.mjs';
 import { createEngine } from '../lib/engine.mjs';
 import { buildSet } from '../lib/pipeline.mjs';
 
@@ -119,61 +120,7 @@ const registerSweep = () => {
 // ============================================================== the options ==
 
 const normalise = (options) => {
-  const o = {
-    input: options.input,
-    out: options.out ?? '.',
-    colors: DEFAULT_COLORS,
-    sizes: [],
-    padding: 'auto',
-    bg: options.bg === undefined ? DEFAULT_BG : options.bg,
-    vars: normaliseVars(options.vars),
-    animation: options.animation !== false,
-    manifest: options.manifest ?? false,
-    base: options.base ?? '/',
-  };
-
-  // Decimal digits only. Number() would accept 0x10, 1e2 and 0b111, which would satisfy
-  // the range check while making the "clear message" contract a lie.
-  const rawColors = options.colors ?? DEFAULT_COLORS;
-  if (!/^\d+$/.test(String(rawColors))) throw new FavconError(`--colors must be an integer 2-256, got '${rawColors}'`);
-  o.colors = Number(rawColors);
-  if (o.colors < 2 || o.colors > 256) throw new FavconError('--colors must be an integer 2-256');
-
-  // 'auto' or a percentage per side. Capped at 45 because 50 leaves no mark at all, and a
-  // value that produces an empty icon should be a message rather than a blank PNG.
-  const rawPadding = options.padding ?? 'auto';
-  if (rawPadding === 'auto') {
-    o.padding = 'auto';
-  } else {
-    if (!/^\d+(\.\d+)?$/.test(String(rawPadding))) {
-      throw new FavconError(`--padding must be 'auto' or a percentage 0-45, got '${rawPadding}'`);
-    }
-    o.padding = Number(rawPadding);
-    if (o.padding < 0 || o.padding > 45) throw new FavconError("--padding must be 'auto' or a percentage 0-45");
-  }
-
-  const mode = options.mode ?? 'release';
-  if (mode !== 'release' && mode !== 'fast') throw new FavconError(`mode must be 'release' or 'fast', got '${mode}'`);
-  // zopfli: false is internal: the suite and bench skip the lossless recompression to save
-  // time, because it changes bytes and never pixels. Never a CLI flag.
-  o.iterations = options.zopfli === false ? 0 : mode === 'fast' ? FAST_ZOPFLI_ITERATIONS : ZOPFLI_ITERATIONS;
-
-  const rawSizes = options.sizes ?? DEFAULT_SIZES;
-  const list = Array.isArray(rawSizes) ? rawSizes : String(rawSizes).trim().split(/[\s,]+/).filter(Boolean);
-  for (const s of list) {
-    if (!/^\d+$/.test(String(s))) throw new FavconError(`--sizes takes pixel sizes, got '${s}'`);
-    const n = Number(s);
-    if (n < 1 || n > 8192) throw new FavconError(`--sizes takes pixel sizes 1-8192, got '${s}'`);
-    // Every size is placed in the safe zone, where the box is rounded down to an even pixel
-    // so the offset stays whole. An odd canvas cannot be placed that way, so it is a message
-    // here rather than an "internal error" from the placement maths later.
-    if (n % 2 !== 0) throw new FavconError(`--sizes takes even pixel sizes, got '${s}'`);
-    if (!o.sizes.includes(n)) o.sizes.push(n);         // 032 and 32 are the same render
-  }
-  if (o.sizes.length === 0) throw new FavconError('--sizes is empty');
-
-  if (o.bg === 'none') o.bg = null;
-
+  const o = normaliseOptions(options);
   if (!o.input) throw new FavconError('no input file given');
   if (!existsSync(o.input)) throw new FavconError(`no such file: ${o.input}`);
   if (!statSync(o.input).isFile()) throw new FavconError(`not a file: ${o.input}`);
