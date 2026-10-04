@@ -111,6 +111,10 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   `--bg none` wrote a 512×507 `icon-512.png` that the manifest declared 512×512. The
   non-square warning still fires only above 1 %, where the stretch shows.
 
+- **The Astro integration puts `base` into the manifest.** Under `base: '/blog'` the page
+  linked `/blog/site.webmanifest`, but the icons inside it pointed at `/icon-32.png` and
+  404'd, so the PWA install failed. `base` now reaches the build and the cache key.
+
 - **Non-square marks produced non-square rasters.** resvg does not stretch to fill `-w N -h N`:
   it preserves the aspect ratio and derives the second dimension, so a 128×64 mark came out
   32×16 and the ICO header disagreed with its own payload. `icon.svg` now carries a square

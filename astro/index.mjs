@@ -55,6 +55,8 @@ const cacheKey = async ({ version, source, options, tools }) => sha256(JSON.stri
     animation: options.animation !== false,
     manifest: options.manifest ?? false,
     zopfli: options.zopfli !== false,
+    // The manifest's bytes depend on it, so a changed base must not hit an old slot.
+    base: options.base ?? '/',
   },
 }));
 
@@ -125,9 +127,11 @@ export default function favcon(options = {}) {
     const source = await readFile(state.inputPath);
     // The dev artefacts are NOT the production bytes, by design: one size, zopfli off.
     // Zopfli is ~98 % of the wall clock, so this is under a second instead of ~30 s.
+    // base goes into the build, not only the links: the manifest's icon URLs carry it too,
+    // and without it a site under /blog links /blog/site.webmanifest whose icons 404.
     const opts = mode === 'fast'
-      ? { ...buildOptions, sizes: [256], zopfli: false }
-      : buildOptions;
+      ? { ...buildOptions, base: state.base, sizes: [256], zopfli: false }
+      : { ...buildOptions, base: state.base };
 
     const key = await cacheKey({
       version: JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version,
