@@ -48,7 +48,7 @@ export async function reference(resvgPath, { source, px, bg, vars, fitted = fals
     const vb = /\bviewBox\s*=\s*"([^"]*)"/.exec(svg);
     if (vb) {
       const [, , w, h] = vb[1].trim().split(/[\s,]+/).map(Number);
-      if (w > 0 && h > 0 && (w / h > 1.01 || h / w > 1.01)) {
+      if (w > 0 && h > 0 && w !== h) {
         const box = Math.max(w, h);
         svg = svg.replace(/<svg\b/, `<svg width="${box}" height="${box}" preserveAspectRatio="none"`);
       }

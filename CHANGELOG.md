@@ -106,6 +106,11 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   alpha while the manifest declared them maskable. favcon now reads the probe's pixel and
   fails with a pointer to `--bg none`.
 
+- **A viewBox within 1 % of square is squared.** It used to be left alone, and resvg derived
+  the second side: a 100×101 mark failed with "ICO payload is 32x33", and a 101×100 mark under
+  `--bg none` wrote a 512×507 `icon-512.png` that the manifest declared 512×512. The
+  non-square warning still fires only above 1 %, where the stretch shows.
+
 - **Non-square marks produced non-square rasters.** resvg does not stretch to fill `-w N -h N`:
   it preserves the aspect ratio and derives the second dimension, so a 128×64 mark came out
   32×16 and the ICO header disagreed with its own payload. `icon.svg` now carries a square
