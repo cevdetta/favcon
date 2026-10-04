@@ -2,7 +2,7 @@
 
 > One SVG in, an optimised favicon set out. A Node CLI (`npx favcon logo.svg --out public`), an Astro integration (`favcon/astro`), and this website, which runs the same SVG stage in the browser with nothing uploaded.
 
-favcon writes `logo.svg` (the mark, animation intact), `icon.svg` (the browser favicon, animation stripped), a 32x32 `favicon.ico` holding a PNG, `apple-touch-icon.png`, and `icon-192.png`/`icon-512.png` placed in the maskable safe zone, plus an optional `site.webmanifest`. Every PNG is quantised with pngquant and recompressed with oxipng and zopfli; the CLI needs the `resvg`, `pngquant` and `oxipng` binaries. The website's SVGs are byte-identical to the CLI's; its PNGs come from WASM substitutes and land within a few percent of the CLI's.
+favcon writes `logo.svg` (the mark, animation intact), `icon.svg` (the browser favicon, animation stripped), a 32x32 `favicon.ico` holding a PNG, `apple-touch-icon.png`, and `icon-192.png`/`icon-512.png` placed in the maskable safe zone, plus an optional `site.webmanifest`. Every PNG is the smaller of a quantised and a lossless encode, recompressed with zopfli; the engine (`@napi-rs/image` and `@gfx/zopfli`) installs with the package, so the CLI needs Node 24 and nothing else. The website's SVGs are byte-identical to the CLI's; its PNGs come from WASM substitutes and land within a few percent of the CLI's on flat marks and 14 % larger on a gradient.
 
 ## Docs
 

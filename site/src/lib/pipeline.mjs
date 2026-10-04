@@ -11,9 +11,9 @@
 //     snap to whole pixels, or the caller's explicit padding
 //   * icoWrap, manifestJson, linkTags
 //
-// What is not, and cannot be: resvg, pngquant and oxipng are binaries. Their WASM substitutes
-// are different programs, and one difference dominates: @jsquash/oxipng exposes no zopfli, and
-// zopfli is where most of the CLI's byte advantage comes from. So the PNGs here are LARGER than
+// What is not, yet: the CLI's image engine, @napi-rs/image and @gfx/zopfli. The WASM
+// substitutes here are different programs, and one difference dominates: @jsquash/oxipng
+// exposes no zopfli, and zopfli is where most of the CLI's byte advantage comes from. So the PNGs here are LARGER than
 // the CLI's and are not reproducible against it. The page says so; this comment is here so that
 // nobody later mistakes the divergence for a bug and "fixes" it by loosening the CLI.
 
