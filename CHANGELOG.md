@@ -101,6 +101,11 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   description that is not empty or an editor stamp, unless told otherwise; `general.svg`'s
   87-byte description was 30 % of its 289-byte `icon.svg`. The rasters are byte-identical.
 
+- **A translucent `--bg` is refused.** The probe only checked that resvg parses the colour,
+  so `transparent`, `rgba(…, 0)` and 8-digit hex passed, and the padded icons shipped with
+  alpha while the manifest declared them maskable. favcon now reads the probe's pixel and
+  fails with a pointer to `--bg none`.
+
 - **Non-square marks produced non-square rasters.** resvg does not stretch to fill `-w N -h N`:
   it preserves the aspect ratio and derives the second dimension, so a 128×64 mark came out
   32×16 and the ICO header disagreed with its own payload. `icon.svg` now carries a square

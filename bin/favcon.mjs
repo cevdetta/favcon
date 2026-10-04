@@ -488,8 +488,18 @@ export async function build(options = {}) {
       try { await bgProbe; } catch {
         throw new FavconError(
           `--bg is not a colour resvg accepts: '${o.bg}'\n` +
-          `       try a hex value (#fff, #ffffff, #ffffffff), an SVG colour name, ` +
-          `rgb()/rgba()/hsl(), or 'none'`,
+          `       try a hex value (#fff, #ffffff), an SVG colour name, ` +
+          `rgb()/hsl(), or 'none'`,
+        );
+      }
+      // The probe proves resvg parses the colour, not that the colour is opaque, and
+      // transparent, rgba(…,0) and 8-digit hex all parse. The padded icons are declared
+      // "any maskable" and the apple icon is composited by iOS, so a ground with alpha
+      // would ship icons that break both. The probe's single pixel says which it is.
+      if (decodeRgba8(readFileSync(join(tmp, 'probe.png'))).rgba[3] !== 255) {
+        throw new FavconError(
+          `--bg must be opaque: '${o.bg}' has transparency, and the padded icons ` +
+          `are declared maskable\n       use --bg none for a transparent, unpadded set`,
         );
       }
     }
