@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { build, icoWrap, toolPath, toolVersions } from '../bin/favcon.mjs';
+import { DEFAULT_COLORS } from '../lib/core.mjs';
 import { reference, score } from '../test/lib/accuracy.mjs';
 import { decode } from '../test/lib/png.mjs';
 
@@ -69,7 +70,7 @@ const sweeps = {};
 
 sweeps.accuracy = async () => {
   const resvg = TOOLS.resvg;
-  const cols = [8, 16, 32, 64];
+  const cols = [8, 16, 32, 64, 256];
   const rows = [];
   let worst = { pct: 0 };
   for (const m of MARKS) {
@@ -90,7 +91,7 @@ sweeps.accuracy = async () => {
   const body = rows.map(([m, px, ...cs]) =>
     `${pad(m, 10)}${num(px, 5)}${cs.map((v) => num(v.toFixed(2), 9)).join('')}`);
   return { title: 'Accuracy: pct by mark, size and palette size',
-           note: 'pct = share of pixels more than 8/255 from an unquantised reference, worse of a white and a black composite. The bar is 1.0 %. `gradient` is excluded from the worst-case line: it exists to make the lossless path win, and asking 8 colours of a four-stop gradient is meant to be bad.',
+           note: 'pct = share of pixels more than 8/255 from an unquantised reference, worse of a white and a black composite. The bar is 1.0 %. `gradient` is excluded from the worst-case line: it exists to make the lossless path win, and no palette of 256 or fewer colours holds a four-stop gradient inside the bar, so the size guard (decision 7) is what decides it.',
            text: [head, ...body].join('\n'),
            summary: `worst non-gradient: ${worst.pct.toFixed(3)} % (${worst.at}, --colors ${worst.colors})` };
 };
@@ -113,8 +114,8 @@ sweeps.colors = async () => {
     }
     out.push([c, bytes, worst, at]);
   }
-  const base = out.find((r) => r[0] === 8)[1];
-  const text = [`${num('colors', 7)}${num('bytes', 9)}${num('vs c8', 9)}${num('worst pct', 11)}  where`,
+  const base = out.find((r) => r[0] === DEFAULT_COLORS)[1];
+  const text = [`${num('colors', 7)}${num('bytes', 9)}${num(`vs c${DEFAULT_COLORS}`, 9)}${num('worst pct', 11)}  where`,
     ...out.map(([c, b, w, at]) =>
       `${num(c, 7)}${num(b, 9)}${num(((b / base - 1) * 100).toFixed(1) + '%', 9)}${num(w.toFixed(3) + '%', 11)}  ${at}${w <= 1 ? '' : '   OVER THE BAR'}`)].join('\n');
   return { title: 'Palette size: bytes against accuracy',
@@ -133,7 +134,7 @@ sweeps.dither = async () => {
     for (const [name, flag] of [['nofs', '--nofs'], ['floyd', '--floyd=1']]) {
       const f = join(dir, `${mark}-${px}-${name}.png`);
       try {
-        await run('pngquant', ['--force', '--speed', '1', flag, '--colors', '8', '--output', f, file]);
+        await run('pngquant', ['--force', '--speed', '1', flag, '--colors', String(DEFAULT_COLORS), '--output', f, file]);
         await run('oxipng', ['-q', '-o', 'max', '-s', '-a', f]);
         cands.push([name, f]);
       } catch { /* 98/99: would be larger, or below the quality floor */ }
@@ -150,7 +151,7 @@ sweeps.dither = async () => {
     bNofs += size((nofs ?? best)[1]);
   }
   const n = raws.length;
-  return { title: 'Which candidate wins, at --colors 8',
+  return { title: `Which candidate wins, at --colors ${DEFAULT_COLORS} (the default)`,
            note: `One row per (mark, size) over ${MARKS.length} marks x 5 sizes. "keep smallest" is the guard from decision 7: it costs nothing when it never fires and stops a raised --colors from producing larger files.`,
            text: [`files                 ${n}`,
                   `no dither wins        ${wins.nofs}`,
@@ -168,7 +169,7 @@ sweeps.order = async () => {
   let quantFirst = 0, oxiFirst = 0;
   for (const { mark, file } of raws) {
     const a = join(dir, `${mark}-qo.png`);
-    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', '8', '--output', a, file]);
+    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', String(DEFAULT_COLORS), '--output', a, file]);
     await run('oxipng', ['-q', '-o', 'max', '-s', '-a', a]);
     quantFirst += size(a);
 
@@ -176,7 +177,7 @@ sweeps.order = async () => {
     copyFileSync(file, b);
     await run('oxipng', ['-q', '-o', 'max', '-s', '-a', b]);
     const c = join(dir, `${mark}-oq2.png`);
-    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', '8', '--output', c, b]);
+    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', String(DEFAULT_COLORS), '--output', c, b]);
     oxiFirst += size(c);
   }
   return { title: 'Stage order at 192 px',
@@ -198,7 +199,7 @@ sweeps.zopfli = async () => {
     const t0 = Date.now();
     for (const { mark, px, file } of raws) {
       const f = join(dir, `${mark}-${px}-${zi}.png`);
-      await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', '8', '--output', f, file]);
+      await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', String(DEFAULT_COLORS), '--output', f, file]);
       await run('oxipng', ['-q', '-o', 'max', '-s', '--zopfli', '--zi', String(zi), '-a', f]);
       bytes += size(f);
     }
@@ -348,7 +349,7 @@ sweeps.ico = async () => {
   let haveIcotool = true;
   for (const { mark, file } of raws) {
     const q = join(dir, `${mark}.png`);
-    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', '8', '--output', q, file]);
+    await run('pngquant', ['--force', '--speed', '1', '--nofs', '--colors', String(DEFAULT_COLORS), '--output', q, file]);
     await run('oxipng', ['-q', '-o', 'max', '-s', '-a', q]);
     const mine = icoWrap(readFileSync(q), 32);
     png += mine.length;

@@ -11,11 +11,12 @@ This file is the specification and the build-out brief. Sections 1–7 describe 
 that turns it into a published package. Section 9 is the contract every change is held to.
 
 > **Status: section 8 is built.** Where the build-out found the spec to be wrong about
-> something, `docs/DECISIONS.md` records what was measured and what changed — decisions 16–19.
+> something, `docs/DECISIONS.md` records what was measured and what changed — decisions 16–19,
+> 23 and 24.
 > The three that matter most: resvg does *not* stretch a non-square mark to fill `-w N -h N`;
 > svgo 4.1.0 both crashes on and silently mangles the animated-input shape §4 requires; and
-> `--colors 8` misses the accuracy bar on the ramp-heavy fixtures and ships anyway, as a
-> stated trade rather than an oversight (decision 19).
+> `--colors` now defaults to 256 (decision 24, reversing decision 19's 8, which missed the
+> accuracy bar on anti-aliased marks and broke gradients).
 > `--sizes` now defaults to `192 512` and `--bg` to `#000000` (decisions 10 and 11, both
 > deliberate reversals of what §1 and §3 originally said), and every PNG except the ICO
 > payload is placed in the safe zone (decision 20) — one padded set declared `"any maskable"`,
@@ -40,7 +41,7 @@ that turns it into a published package. Section 9 is the contract every change i
 
 ```
 -o, --out DIR     Output directory (default: current)
-    --colors N    Palette size, 2-256 (default: 8)
+    --colors N    Palette size, 2-256 (default: 256)
     --sizes LIST  Padded "any maskable" PNG sizes (default: "192 512")
     --bg COLOR    Ground of the padded icons (default: #000000). "none" keeps the set
                   transparent and unpadded, declared "any" only.
@@ -95,8 +96,8 @@ threshold is the wrong shape — at 16 px nearly every pixel is an anti-aliasing
 | 3 | **resvg never sees `var()`.** | resvg 0.48.1 has no `var()` support — it warns and renders the mark **entirely black**. Rasters come from the final `icon.svg`. |
 | 4 | **icon.svg plugins:** `preset-default` + `convertStyleToAttrs` + `removeAttrs{(role\|aria-.*\|data-.*\|class)}` + `removeDimensions` + `removeTitle` + `removeDesc`, `multipass`. | `preset-default` alone leaves `aria-label` and turns the stylesheet into `style="fill:…"`. `convertStyleToAttrs` fixes the second, `removeAttrs` the first. `removeViewBox` is excluded **explicitly**, not left to the preset: it is absent from preset-default in svgo 4 but present in svgo 3, where an input carrying `width`/`height` matching the viewBox would lose the viewBox and then the dimensions, leaving an SVG that cannot scale. |
 | 5 | **`floatPrecision: 1`.** | 7490 B vs 7996 B at the svgo default of 3 (−6.3 %), at pct 0.0965 % — ten times inside the bar. `floatPrecision 0` is 6030 B but **fails** at 1.0233 %. |
-| 6 | **PNG: `pngquant --speed 1 --nofs --colors N`, then `oxipng`.** (`N` defaults to **8**; it misses the accuracy bar on ramp-heavy marks and ships anyway — see decision 19 in docs/DECISIONS.md.) | Quantise-then-recompress is mandatory (see §2). `--nofs` beats every dither setting on bytes and still passes. `--speed 1` is smallest *and* most accurate. `--posterize` is rejected — its least aggressive legal value (4) already misses the bar. |
-| 7 | **Keep whichever of the lossy and lossless paths is smaller.** | Inert at the default `--colors 8` (lossless wins 0/90 files), but at `--colors 32` lossless wins **13/18 at 16 px** and the guard saves 4 %. Stops a raised `--colors` from silently producing *larger* files. |
+| 6 | **PNG: `pngquant --speed 1 --nofs --colors N`, then `oxipng`.** (`N` defaults to **256**, a ceiling: libimagequant spends only the colours a mark needs. Decision 24 in docs/DECISIONS.md replaced the earlier 8.) | Quantise-then-recompress is mandatory (see §2). `--nofs` beats every dither setting on bytes and still passes. `--speed 1` is smallest *and* most accurate. `--posterize` is rejected — its least aggressive legal value (4) already misses the bar. |
+| 7 | **Keep whichever of the lossy and lossless paths is smaller.** | Inert at `--colors 8` (lossless wins 0/90 files), but at `--colors 32` lossless wins **13/18 at 16 px** and the guard saves 4 %; at the default 256 it wins 7/50 on the fixtures (decision 24). Stops a high `--colors` from silently producing *larger* files. |
 | 8 | **Zopfli runs once, on the winner of that comparison**, at `--zi 120`. | Zopfli-ing both paths triples the cost for zero extra bytes: decide with the cheap `-o max -s` pass, then zopfli only the winner — same bytes, 3.7× faster. Iterations: 79665 B at the default 15, 79454 at 60, 79386 at 120. The curve is flattening (−0.27 %, then −0.09 %) but bytes ship forever and build time does not. **Use the long flag `--zopfli`:** oxipng 10.0.0 changed the short form from `-Z` to `-z`, and `-Z` survives only as an undocumented compatibility alias. Verified on 10.2.1 — `-Z` and `--zopfli` produce identical bytes today, but only the long form is safe on both 9.x and 10.x. |
 | 9 | **`favicon.ico`: one 32×32 entry, raw PNG payload, container written in JS.** | BMP entries are **16.7× larger** (77 148 vs 4 611 B over the corpus), and `-b` below 32 silently drops alpha. Paletted PNG inside an ICO was **verified to decode** in headless Chromium and Firefox. The 22-byte container written in JS is **byte-identical to `icotool -c -r` on 39/39 builds** (verified 2026-09-12), which removes the only dependency with no npm package and no Windows build. See §5 for the exact layout. |
 | 10 | **`--bg` defaults to opaque black**, with a stderr warning when it is not given, **validated by probing resvg** (a 1×1 render, ~3 ms) rather than by a colour table. | iOS composites transparent Home Screen icons onto **black**. Opaque is also 0.3 % *smaller* (no tRNS, simpler palette). Probing means `rgb()`, `rgba()` and `hsl()` all work and the validator can never disagree with the renderer — a name list rejects `rgb()`, and a loose `/^[A-Za-z]+$/` accepts `nonered`. Applies to every padded icon. Corners stay square; the OS applies its own mask. |

@@ -40,18 +40,20 @@ The three binaries. Their WASM substitutes are not the same programs:
 | recompress | oxipng `-o max --zopfli --zi 120` | `@jsquash/oxipng` level 6 | **no zopfli** |
 
 Measured in headless Chromium against the CLI on the same marks, same options
-(`--colors 8 --sizes "192 512" --bg '#000000'`):
+(the defaults: `--colors 256 --sizes "192 512" --bg '#000000'`), 2026-10-01:
 
 | fixture | logo.svg | icon.svg | manifest | placement | PNG bytes |
 |---|---|---|---|---|---|
 | `tiles` | exact | exact | exact | identical | 600 → 620 (+3.3%) |
-| `heavy` | exact | exact | exact | identical | 3574 → 3758 (+5.1%) |
-| `general` | exact | exact | exact | identical | 3525 → 3758 (+6.6%) |
-| `gradient` | exact | exact | exact | identical | 5228 → 10730 (**+105%**) |
+| `heavy` | exact | exact | exact | identical | 5370 → 5043 (−6.1%) |
+| `general` | exact | exact | exact | identical | 4973 → 5079 (+2.1%) |
+| `gradient` | exact | exact | exact | identical | 27380 → 29642 (+8.3%) |
 
-So the SVGs, the manifest and the safe-zone placement are exact; the PNGs cost a few percent on
-a flat mark and **more than double on a gradient**. That last row is the honest headline: this
-page cannot tell you what your icons will weigh.
+So the SVGs, the manifest and the safe-zone placement are exact, and the PNGs land within a
+few percent of the CLI's either way: the missing zopfli costs bytes, and `image-q` sometimes
+wins them back. (At the old default of 8 colours the gradient more than doubled here; the gap
+was the two quantisers disagreeing about which 8 colours to keep.) Close is not identical, so
+this page still cannot tell you what your icons will weigh.
 
 `image-q` is used rather than a libimagequant WASM build on purpose: libimagequant is GPL-3.0+,
 and linking it would make this GPL-3 (see the licence note in `CLAUDE.md`).

@@ -7,7 +7,7 @@
 //     files to outDir - correct for static output AND for every SSR adapter, for free.
 //     Building in astro:build:done means writing into `dir` by hand and getting it wrong
 //     for any adapter that post-processes dist/.
-//   * astro:config:setup must not build. It runs on every dev-server restart, and a ~13 s
+//   * astro:config:setup must not build. It runs on every dev-server restart, and a ~30 s
 //     stall there is not a tool, it is a hostage situation. It only resolves paths, watches
 //     the input and registers the middleware.
 //   * Not re-running the build is a CONTENT-ADDRESSED CACHE, not a heuristic. See cacheKey.
@@ -124,7 +124,7 @@ export default function favcon(options = {}) {
   const runBuild = async (mode, logger) => {
     const source = await readFile(state.inputPath);
     // The dev artefacts are deliberately NOT the production bytes: one size, zopfli off.
-    // Zopfli is ~98 % of the wall clock, so this is under a second instead of ~13.
+    // Zopfli is ~98 % of the wall clock, so this is under a second instead of ~30 s.
     const opts = mode === 'fast'
       ? { ...buildOptions, sizes: [256], zopfli: false }
       : buildOptions;

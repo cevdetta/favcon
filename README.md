@@ -12,10 +12,10 @@ mark is animated.
 ```
 logo.svg                  289 B  static (no animation in the source)
 icon.svg                  289 B
-favicon.ico               279 B
-apple-touch-icon.png      711 B  mark at 142px of 180 in the safe zone
-icon-192.png              759 B  mark at 152px of 192 in the safe zone
-icon-512.png             2055 B  mark at 408px of 512 in the safe zone
+favicon.ico               463 B
+apple-touch-icon.png     1092 B  mark at 142px of 180 in the safe zone
+icon-192.png             1160 B  mark at 152px of 192 in the safe zone
+icon-512.png             2721 B  mark at 408px of 512 in the safe zone
 ```
 
 (That is `test/fixtures/general.svg`, a two-colour mark, at the defaults. Your bytes depend on
@@ -94,9 +94,10 @@ sharp's `quality: 60` and `favgen` at `colors: 64`: one quantised encode, no com
 zopfli.
 
 favcon does fewer files and more work on each: quantise, compare three candidate encodings,
-recompress the winner with zopfli, and check the result against the original with a pixel
-gate. It also does the thing none of them do — keeps your animation in one file and
-guarantees it is *absent* from the other.
+and recompress the winner with zopfli. The default output is held to a pixel-accuracy bar —
+no more than 1 % of pixels visibly off — by the test suite, rather than taken on trust
+([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the numbers). It also does the thing none of them do — keeps your animation in one file
+and guarantees it is *absent* from the other.
 
 If you want thirty files for thirty platforms, use `favicons`. If you want six files that are
 as small as they can be, this one.
@@ -105,7 +106,7 @@ as small as they can be, this one.
 
 ```
 -o, --out DIR     Output directory (default: current)
-    --colors N    Palette size, 2-256 (default: 8)
+    --colors N    Palette size, 2-256 (default: 256, a ceiling, not a target)
     --sizes LIST  Padded "any maskable" PNG sizes (default: "192 512")
     --bg COLOR    Ground of the padded icons (default: #000000). "none" keeps the set
                   transparent and unpadded, declared "any" only.
@@ -269,8 +270,8 @@ back stale files after a `brew upgrade`, invisibly. A hit hardlinks into `public
 single-digit milliseconds.
 
 For a genuinely cold first run, `dev: 'fast'` (the default) builds one 256 px size with zopfli
-off: under a second instead of ~13, since zopfli is ~98 % of the wall clock. Dev artefacts are
-deliberately not the production bytes.
+off: under a second instead of the full build's ~30 s, since zopfli is ~98 % of the wall clock.
+Dev artefacts are deliberately not the production bytes.
 
 **Head tags.** Astro has no official head-injection hook — all four `injectScript` stages are
 JavaScript, and a `<link rel="icon">` written by a script is found after the browser has
@@ -292,8 +293,8 @@ Every step was chosen by measurement. The reasoning is in
 The short version, because these are the parts that look wrong until you know why:
 
 - **Quantise before you recompress.** pngquant re-encodes from scratch, so any order ending in
-  pngquant throws away everything oxipng did — measured at 256 px, the wrong order is just
-  under 10 % bigger.
+  pngquant throws away everything oxipng did — measured at 192 px, the wrong order is 19.7 %
+  bigger.
 - **An ICO holding a PNG is a 22-byte header plus that PNG verbatim**, so nothing can be
   optimised after packing. favcon writes that header itself, byte-identical to
   `icotool -c -r`, which removes the only dependency with no npm package and no Windows build.

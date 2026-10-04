@@ -194,6 +194,8 @@ a mark whose motion selects nothing by class still gets the full inlining.
 
 ### 19. `--colors` stays at 8, and that is a trade rather than a clean win
 
+> **Reversed by decision 24:** the default is now 256.
+
 The 1.0 % accuracy bar is met at `--colors 16` on every file. It is **not** met at 8 on every
 mark that ships here: `flat.svg` (1.11 % at 180 and at 192) and `animated.svg` (1.12 % at 180,
 1.57 % at 192) stay over. Padding took the rest inside — `heavy` at 192 went from 1.87 % to
@@ -303,6 +305,8 @@ apart. Sharing a file is the lesser evil by a wide margin.
 The SVGs, the manifest and the placement are exact — including the snap, so the mark lands on
 the same pixel in both. The PNGs are not, and a gradient mark **more than doubles**: `image-q`
 is not libimagequant, and `@jsquash/oxipng` exposes no zopfli. The site says so on the page.
+(That was at `--colors 8`. At the default of 256, decision 24, the two quantisers stop fighting
+over which few colours to keep and the PNGs land within −6.1 % to +8.3 % of the CLI's.)
 
 **The split also broke the published package, briefly.** `bin/favcon.mjs` imports
 `../lib/core.mjs`, and `files` shipped only `bin` and `astro`, so the tarball would have
@@ -350,6 +354,7 @@ spec lets a platform composite a transparent icon onto any colour, so the safe z
 nothing, and padding 32 px of tab furniture only makes the mark smaller. Unpadded,
 `icon-32.png` is the native render again — the ICO payload's twin, as it was before.
 
+
 ### 23. Released through trusted publishing, so `provenance` is not set by hand
 
 §6 of `CLAUDE.md` specified `"publishConfig": {"access": "public", "provenance": true}` and a
@@ -370,3 +375,41 @@ publish from a laptop fails instead of proceeding. `publishConfig` is therefore
 The job also installs with `--ignore-scripts`: it is the one job holding the OIDC token, so no
 dependency lifecycle script runs in it. pngquant comes from apt there, which is the version CI
 measures with anyway.
+
+### 24. `--colors` defaults to 256: the bar holds by default, for 44.6 % more bytes
+
+Decision 19 shipped 8 colours as a stated trade: about 18 % smaller than 16, and outside the
+1.0 % accuracy bar on anti-aliased marks. Two things made that the wrong trade.
+
+**8 is not a mild miss on every mark.** On a gradient it is a broken one: 27–28 % of pixels
+visibly off at every size, and favcon's own benchmark excluded the gradient from its
+worst-case line as "meant to be bad". A favicon generator that wrecks a common kind of mark by
+default, and says so only in a benchmark, is not making a trade users can see.
+
+**Matched against a competitor, 8 colours is where most of favcon's byte lead came from.**
+Measured 2026-10-01 against `@vite-pwa/assets-generator` 2.0.0 (sharp, `quality: 60`): fed the
+same lossless pixels, favcon's encoder at 16 colours beats or matches its bytes on typical marks
+(−6 % to +5 % over four files) while being more accurate on every file, and wins by 30 % only
+on pixel-grid marks. The large default-set gaps came from fewer files and fewer colours. Bytes
+won by being visibly wrong are not a lead worth having.
+
+256 is pngquant's ceiling, not a target: libimagequant spends only the colours a mark needs,
+which is why 64, 128 and 256 produce identical bytes on every non-gradient fixture. From
+`docs/BENCHMARKS.md` (9 marks, gradient excluded, 180 + 192 + 512 px, zopfli on):
+
+| `--colors` | bytes | vs 256 | worst pct |
+|---|---|---|---|
+| 8 | 25 500 | −30.9 % | **1.563 %** (over the bar) |
+| 16 | 30 360 | −17.7 % | 0.372 % |
+| 32 | 33 849 | −8.2 % | 0.122 % |
+| 64 – 256 | 36 881 | 0 | **0.114 %** |
+
+So the default set costs **44.6 % more** than at 8, and every non-gradient raster is now at
+least 8.8× inside the bar. The gradient goes from 27 % to 1.7–1.8 %: still over, because no
+256-colour palette holds a four-stop ramp, and the size guard (decision 7) decides it. On
+`general.svg` the quickstart set grows from 4 382 B to 6 014 B, and a full build from ~21 s
+to ~30 s (zopfli has more distinct colours to model).
+
+The accuracy tests now score the **default** build instead of a hand-picked `--colors 16`, so
+"inside the bar" is a claim about what ships. `--colors 8` remains one flag away for anyone
+who wants the old trade, and a test pins that it still misses the bar on `flat.svg`.

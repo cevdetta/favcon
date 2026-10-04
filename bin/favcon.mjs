@@ -550,9 +550,10 @@ export async function build(options = {}) {
     //   * no dither  - smallest on this corpus, and still inside the accuracy bar
     //   * Floyd-Steinberg - wins on a minority of files; adding it was the single biggest
     //     improvement to the keep-smallest oracle
-    //   * no pngquant at all - a guard, not a contender. At --colors 8 it never wins, but
-    //     pngquant's palette overhead can exceed what oxipng's own palette reduction
-    //     achieves: at --colors 32 the quantised 16px file is 4% LARGER than doing nothing.
+    //   * no pngquant at all - a guard. pngquant's palette overhead can exceed what oxipng's
+    //     own palette reduction achieves: at --colors 32 the quantised 16px file was 4%
+    //     LARGER than doing nothing, and at the default 256 the gradient's small sizes go
+    //     lossless (decision 7).
     // Only the winner gets the zopfli pass - running it on every candidate costs 3x for
     // exactly the same bytes, because the losers are discarded anyway.
     const renderPng = async ({ px, bg, tag, dests, svg }) => {
@@ -682,8 +683,8 @@ const USAGE = `Usage:
 
 Options:
   -o, --out DIR     Output directory (default: current)
-      --colors N    Palette size, 2-256 (default: 8). Fine for a flat mark; raise it to 16
-                    if yours has gradients or soft shading - see docs/BENCHMARKS.md.
+      --colors N    Palette size, 2-256 (default: 256, a ceiling: a flat mark still uses
+                    only the colours it has). Lower it to trade accuracy for bytes.
       --sizes LIST  Padded PNG sizes, the manifest's "any maskable" icons (default:
                     "192 512", the pair Chrome's install criteria document).
       --bg COLOR    Ground of the padded icons, apple-touch-icon.png (180px) and

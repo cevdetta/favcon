@@ -244,16 +244,14 @@ describe('accuracy', { skip: skipNoTools }, () => {
     ['icon-512.png', 512, '#000000', true],
   ];
 
-  // Built at --colors 16, NOT at the default of 8. The bar is a claim about the pipeline,
-  // and 16 is the palette that meets it on every mark here; 8 is what ships because it is
-  // ~18% smaller and a flat mark - which is what a logo usually is - sits far inside the bar
-  // at 8 anyway. The test below pins that trade so neither half can drift unnoticed.
+  // Built at the DEFAULT palette, so the bar is a claim about what ships rather than about a
+  // palette chosen for the test (decision 24 retired the old default of 8, which missed it).
   //
   // zopfli is switched off for these builds. It is a lossless recompressor: it changes how
   // the pixels are stored and not what they are, so the decoded image is identical and the
   // gate measures exactly the same thing ~50x faster. The next test is the proof.
   const accuracyBuild = (name) =>
-    buildOnce(`acc-${name}`, { input: fixture(`${name}.svg`), sizes: [192, 512], colors: 16, zopfli: false });
+    buildOnce(`acc-${name}`, { input: fixture(`${name}.svg`), sizes: [192, 512], zopfli: false });
 
   it('zopfli changes bytes, not pixels', async () => {
     const withZopfli = await SMALL('second');
@@ -277,23 +275,21 @@ describe('accuracy', { skip: skipNoTools }, () => {
     });
   }
 
-  it('ships --colors 8 by default, and 8 is outside the bar on the apple icon', async () => {
-    // Two halves of one deliberate trade. If the default moves, the first assertion fails;
-    // if 8 quietly starts meeting the bar, the second does and the comment above is stale.
+  it('ships --colors 256 by default, and a lower palette is the accuracy trade', async () => {
+    // Two halves of one decision (24). If the default moves, the first assertion fails; if 8
+    // quietly starts meeting the bar on flat's apple icon, the second does and the reason
+    // for leaving 8 behind needs re-stating.
     const dflt = await buildOnce('dflt-colors', { input: fixture('flat.svg'), sizes: [32], zopfli: false });
-    const eight = await buildOnce('eight-colors', { input: fixture('flat.svg'), sizes: [32], colors: 8, zopfli: false });
+    const full = await buildOnce('full-colors', { input: fixture('flat.svg'), sizes: [32], colors: 256, zopfli: false });
     for (const f of ['icon-32.png', 'apple-touch-icon.png']) {
-      assert.deepEqual([...readFileSync(join(dflt.out, f))], [...readFileSync(join(eight.out, f))],
-        `the default palette is no longer 8 (${f} differs)`);
+      assert.deepEqual([...readFileSync(join(dflt.out, f))], [...readFileSync(join(full.out, f))],
+        `the default palette is no longer 256 (${f} differs)`);
     }
-    // flat.svg on the apple icon: the stable miss that pins the trade. The size icons used
-    // to miss on heavy at 192 as well, but padding shrank the mark and took them inside
-    // (heavy at 192 scores 0.65% now) - docs/BENCHMARKS.md carries the current table.
     const { out } = await buildOnce('flat-8', { input: fixture('flat.svg'), sizes: [192], colors: 8, zopfli: false });
     const ref = await reference(resvg, { source: fixture('flat.svg'), px: 180, bg: '#000000', vars: {}, fitted: true });
     const s = score(decode(readFileSync(join(out, 'apple-touch-icon.png'))), ref);
     assert.ok(s.pct > THRESHOLD_PCT,
-      `flat at --colors 8 scored ${s.pct.toFixed(3)}%, inside the bar - decision 19 needs revisiting`);
+      `flat at --colors 8 scored ${s.pct.toFixed(3)}%, inside the bar - decision 24's reason needs re-stating`);
   });
 
   it('the gradient needs a palette big enough for it, and says so by failing at 8', async () => {

@@ -67,8 +67,8 @@ const outputs = [
       <small>or drop one here</small>
     </label>
     <label>Palette
-      <input type="number" name="colors" value="8" min="2" max="256" required />
-      <small>2–256. Raise it for a mark with gradients.</small>
+      <input type="number" name="colors" value="256" min="2" max="256" required />
+      <small>2–256. A ceiling: a flat mark uses only the colours it has.</small>
     </label>
     <label>Sizes
       <input type="text" name="sizes" value="192 512" pattern="\s*\d+([\s,]+\d+)*\s*" required />
@@ -120,8 +120,8 @@ const outputs = [
       the file differs by whatever the PNG differs by.
     </p>
     <p>
-      <strong>The PNGs are larger</strong>, because the three programs the CLI shells out to have
-      no browser equivalents, only substitutes:
+      <strong>The PNGs differ</strong>, because the three programs the CLI shells out to have no
+      browser equivalents, only substitutes:
     </p>
     <div>
       <table>
@@ -133,22 +133,22 @@ const outputs = [
         </tbody>
       </table>
     </div>
-    <p>Measured over four fixtures, PNG bytes only:</p>
+    <p>Measured over four fixtures at the defaults, PNG bytes only:</p>
     <div>
       <table>
         <thead><tr><th>mark</th><th>CLI</th><th>here</th><th></th></tr></thead>
         <tbody>
           <tr><td>flat, pixel grid</td><td>600&nbsp;B</td><td>620&nbsp;B</td><td>+3.3%</td></tr>
-          <tr><td>dense geometry</td><td>3574&nbsp;B</td><td>3758&nbsp;B</td><td>+5.1%</td></tr>
-          <tr><td>two-colour mark</td><td>3525&nbsp;B</td><td>3758&nbsp;B</td><td>+6.6%</td></tr>
-          <tr><td><strong>radial gradient</strong></td><td>5228&nbsp;B</td><td>10730&nbsp;B</td><td><strong>+105%</strong></td></tr>
+          <tr><td>dense geometry</td><td>5370&nbsp;B</td><td>5043&nbsp;B</td><td>−6.1%</td></tr>
+          <tr><td>two-colour mark</td><td>4973&nbsp;B</td><td>5079&nbsp;B</td><td>+2.1%</td></tr>
+          <tr><td>radial gradient</td><td>27380&nbsp;B</td><td>29642&nbsp;B</td><td>+8.3%</td></tr>
         </tbody>
       </table>
     </div>
     <p>
-      A flat mark costs a few percent. <strong>A mark with smooth colour ramps more than
-      doubles</strong> — that is the quantiser difference and the missing zopfli together, and
-      it is why this page will not tell you what your icons will weigh.
+      Within a few percent either way: the missing zopfli costs bytes, and a different
+      quantiser can win them back, as it does on the dense mark. Close is not the same, though,
+      and it is why this page will not tell you what your icons will weigh.
     </p>
     <p>
       Treat this as a preview you can see and click. For bytes you can measure, reproduce and

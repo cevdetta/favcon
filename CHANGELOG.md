@@ -13,11 +13,12 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Added
 
-- **A website** (`site/`): favcon in the browser, client-side, nothing uploaded. Astro, with a
-  WASM raster stage (`@resvg/resvg-wasm`, `image-q`, `@jsquash/oxipng`) and a dependency-free
-  zip writer. `logo.svg`, `icon.svg`, `site.webmanifest` and the safe-zone placement are
-  byte-identical to the CLI's; the PNGs are +3.3 % to +105 % larger, and the page says so with
-  the measurements rather than a disclaimer.
+- **A website**, <https://favcon.cevdet.ch> (`site/`): favcon in the browser, client-side,
+  nothing uploaded. Astro, with a WASM raster stage (`@resvg/resvg-wasm`, `image-q`,
+  `@jsquash/oxipng`) and a dependency-free zip writer. `logo.svg`, `icon.svg`,
+  `site.webmanifest` and the safe-zone placement are byte-identical to the CLI's; the PNGs land
+  within −6.1 % to +8.3 % of the CLI's at the defaults, and the page says so with the
+  measurements rather than a disclaimer.
 - **`lib/core.mjs`**, favcon's isomorphic half — the svgo stage, the ICO container, the mask
   maths, the manifest and the `<link>` block — imported by both the CLI and the website so the
   two cannot drift. Three seams make it portable: svgo is injected, the mask maths takes decoded
@@ -62,6 +63,12 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 - CI on `ubuntu-24.04` (pinned), `macos-15` and a `windows-latest` smoke job.
 
 ### Changed
+
+- **`--colors` defaults to 256** (was 8). 8 colours missed the 1.0 % accuracy bar on
+  anti-aliased marks and put 27 % of a gradient's pixels visibly off; at 256 every non-gradient
+  fixture is at least 8.8× inside the bar, for 44.6 % more bytes. 256 is a ceiling, not a
+  target: a flat mark still uses only the colours it has. `--colors 8` restores the old trade.
+  Decision 24.
 
 - **`apple-touch-icon.png` now places the mark inside the safe zone.** It stays 180 px. iOS
   cuts the icon to a rounded square; unplaced, a mark with a 6 % margin lost 12 corner pixels to

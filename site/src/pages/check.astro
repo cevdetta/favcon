@@ -31,7 +31,7 @@
   try {
     for (const [name, svg] of [['tiles', tiles], ['general', general], ['gradient', gradient], ['heavy', heavy]]) {
       const t0 = performance.now();
-      const built = await buildInBrowser(svg, { colors: 8, sizes: [192, 512], bg: '#000000' });
+      const built = await buildInBrowser(svg, { sizes: [192, 512], bg: '#000000' });
       lines.push(`mark ${name} ms=${Math.round(performance.now() - t0)} animated=${built.animated}`);
       for (const f of built.files) lines.push(`  file ${name} ${f.name} ${f.bytes.length}`);
       lines.push(`  fit ${name} apple=${built.fit.apple.box}/${built.fit.apple.canvas}` +

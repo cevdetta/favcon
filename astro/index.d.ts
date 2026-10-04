@@ -25,7 +25,7 @@ export interface FavconOptions {
   manifest?: boolean | Record<string, unknown>;
   /**
    * What to build while the dev server runs.
-   * `'fast'` (default) is one 256 px size with zopfli off: under a second instead of ~13,
+   * `'fast'` (default) is one 256 px size with zopfli off: under a second instead of ~30 s,
    * and deliberately not the production bytes. `'full'` builds the real set. `'skip'`
    * builds nothing.
    */
