@@ -1090,6 +1090,20 @@ describe('the astro integration', () => {
       assert.deepEqual([...readFileSync(join(pub, 'favicon.ico'))], [...before]);
     });
 
+  it('puts config.base into the manifest\'s icon URLs, not only the links', { skip: skipNoTools }, async () => {
+    // The page linked /blog/site.webmanifest while the icons inside it pointed at /icon-32.png,
+    // which 404s on any site deployed under a base path, and the PWA install fails with it.
+    const root = freshDir();
+    const s = stub(root, '/blog');
+    const integration = favconAstro({ input: 'logo.svg', sizes: [32], manifest: true });
+    copyFileSync(fixture('flat.svg'), (mkdirSync(root, { recursive: true }), join(root, 'logo.svg')));
+    await integration.hooks['astro:config:setup']({ command: 'build', ...s.args });
+    await integration.hooks['astro:build:start']({ logger: s.args.logger });
+    const manifest = JSON.parse(readFileSync(join(root, 'public', 'site.webmanifest'), 'utf8'));
+    assert.deepEqual(manifest.icons.map((i) => i.src), ['/blog/icon-32.png']);
+    assert.ok(linksFrom(s.calls).includes('/blog/site.webmanifest'), 'the manifest link lost its base');
+  });
+
   it('keeps going when public/ already holds exactly what it would write',
     { skip: skipNoTools }, async () => {
       // The clean-install case: node_modules/.cache is gone, so the stamp is gone, but the
