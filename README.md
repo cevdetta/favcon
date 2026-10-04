@@ -57,7 +57,7 @@ minutes, and they pin the exact toolchain your byte counts were measured with. S
 `.github/workflows/ci.yml` for a worked example. Note that upstream resvg has shipped no
 Windows binary since v0.47.0.
 
-Node 22.12 or newer.
+Node 24 or newer.
 
 ## What you get
 

@@ -25,11 +25,6 @@ jobs:
     # and with it the output bytes; the failure would look like a favcon regression.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # 22.12 is the engines floor: the first release with stable import.meta.resolve.
-        node: ['22.12', '24', 'lts']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -41,7 +36,8 @@ jobs:
       # fails on a missing lockfile rather than resolving one from the registry.
       - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
         with:
-          runtime: node@${{ matrix.node }}
+          # Node 24 is both the engines floor and the current LTS, so one version covers both.
+          runtime: node@24
           require-lockfile: true
 
       # icoutils is here for one reason: so the ICO-equivalence test runs instead of skipping.
@@ -80,7 +76,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
         with:
-          runtime: node@lts
+          runtime: node@24
           require-lockfile: true
       - run: brew install resvg oxipng pngquant
       - run: pnpm test
@@ -99,7 +95,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
         with:
-          runtime: node@lts
+          runtime: node@24
           require-lockfile: true
       - run: pnpm test
 
@@ -114,43 +110,13 @@ jobs:
           persist-credentials: false
       - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
         with:
-          runtime: node@lts
+          runtime: node@24
           require-lockfile: true
       - run: pnpm --filter favcon-site build
       # The runner image ships Google Chrome, not a `chromium` binary.
       - run: node site/test/cdp-check.mjs
         env:
           CHROME: google-chrome
-
-  package:
-    # test/, docs/, bench/, site/ and .github/ must never reach the tarball, and lib/ must:
-    # bin/favcon.mjs imports lib/core.mjs, so a tarball without it fails on first run.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
-        with:
-          runtime: node@lts
-          install: false
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: npm pack contains only what it should
-        run: |
-          set -euo pipefail
-          npm pack --dry-run --json > pack.json
-          node -e "
-            const parsed = JSON.parse(require('node:fs').readFileSync('pack.json','utf8'));
-            const pkg = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
-            const files = pkg.files.map(f => f.path);
-            const leaked = files.filter(f => /^(test|docs|bench|site|\.github)\//.test(f));
-            if (leaked.length) { console.error('these must not ship:', leaked); process.exit(1); }
-            for (const need of ['bin/favcon.mjs','lib/core.mjs','astro/index.mjs','astro/Head.astro','README.md','LICENSE','CHANGELOG.md']) {
-              if (!files.includes(need)) { console.error('missing from the tarball:', need); process.exit(1); }
-            }
-            console.log(files.length + ' files, all accounted for');
-          "
 
   workflows:
     # Static analysis of the workflows themselves: template injection, over-broad

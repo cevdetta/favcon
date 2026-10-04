@@ -170,7 +170,9 @@ describe('custom properties', () => {
     assert.equal(readFileSync(join(a, 'icon.svg'), 'utf8'), readFileSync(join(b, 'icon.svg'), 'utf8'));
   });
 
-  it('fails loudly on an unresolvable var() and writes nothing', async () => {
+  // The full CLI reports missing tools before it reads the input, so this run needs them. The
+  // rule itself needs no binary, and the svgo-stage group below checks it on every platform.
+  it('fails loudly on an unresolvable var() and writes nothing', { skip: skipNoTools }, async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '-o', out, fixture('unresolved.svg')]);
     assert.equal(r.code, 1);
@@ -797,7 +799,7 @@ describe('rendering', { skip: skipNoTools }, () => {
 // ---------------------------------------------------------------------- 18 --
 
 describe('the published tarball', () => {
-  it('contains bin/ and astro/ and nothing from test, docs, bench or .github', () => {
+  it('contains bin/, lib/, astro/ and the docs, and nothing from test, docs, bench, site or .github', () => {
     // On Windows `npm` is npm.cmd, which Node refuses to spawn without a shell since the
     // CVE-2024-27980 fix, so the Windows job would fail here with ENOENT. The arguments are
     // constants, so the shell has nothing to misquote.
@@ -812,8 +814,9 @@ describe('the published tarball', () => {
     // ERR_MODULE_NOT_FOUND on first run. This assertion is the only thing standing between
     // the split and a broken publish.
     assert.ok(files.includes('lib/core.mjs'), 'lib/core.mjs is missing - the package cannot run');
-    assert.ok(files.some((f) => f.startsWith('astro/')), 'astro/ is missing');
-    assert.ok(files.includes('package.json') && files.includes('README.md'));
+    for (const need of ['astro/index.mjs', 'astro/Head.astro', 'package.json', 'README.md', 'LICENSE', 'CHANGELOG.md']) {
+      assert.ok(files.includes(need), `${need} is missing from the tarball`);
+    }
     for (const f of files) {
       assert.ok(!/^(test|docs|bench|site|\.github)\//.test(f), `${f} must not ship`);
     }
@@ -858,6 +861,14 @@ describe('the svg stage on its own', () => {
     const b = optimiseSvg(read('general'), { icon: true, vars: { ground: '#123456' } });
     assert.match(b.data, /#123456/);
     assert.ok(!/#1f3a5f/i.test(b.data));
+  });
+
+  it('throws FavconError on a var() with no fallback, in the icon pass', () => {
+    assert.throws(() => optimiseSvg(read('unresolved'), { icon: true }), (e) => {
+      assert.ok(e instanceof FavconError);
+      assert.match(e.message, /unresolved var\(--brand\)/);
+      return true;
+    });
   });
 
   it('throws FavconError, naming --no-animation only for the logo pass', () => {
