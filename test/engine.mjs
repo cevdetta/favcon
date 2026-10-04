@@ -86,3 +86,56 @@ describe('probe', () => {
     await assert.rejects(engine.probe('nonered'));
   });
 });
+
+const fakeImage = (q, l, seen = {}) => ({
+  pngQuantize: async (png, opts) => { seen.quantize = opts; return q; },
+  losslessCompressPng: async () => l,
+});
+
+describe('encode', () => {
+  it('keeps the smaller encode, and the quantised one on a tie', async () => {
+    const q = Uint8Array.of(1, 1, 1), smaller = Uint8Array.of(2, 2), same = Uint8Array.of(3, 3, 3);
+    const enc = (a, b) => createEngine({ image: fakeImage(a, b) }).encode(Uint8Array.of(0), { colors: 8 });
+    assert.deepEqual(await enc(q, smaller), smaller);
+    assert.deepEqual(await enc(q, same), q);
+    assert.deepEqual(await enc(smaller, q), smaller);
+  });
+
+  it('asks the quantiser for a fixed palette, with no quality gate', async () => {
+    const seen = {};
+    await createEngine({ image: fakeImage(Uint8Array.of(1), Uint8Array.of(1, 2), seen) })
+      .encode(Uint8Array.of(0), { colors: 256 });
+    assert.deepEqual(seen.quantize, { colors: 256, speed: 1, minQuality: 0, maxQuality: 100 });
+  });
+
+  it('returns a PNG of the same size as its input', async () => {
+    const out = dec(await engine.encode(await engine.render(icon('heavy'), 96), { colors: 256 }));
+    assert.deepEqual([out.width, out.height], [96, 96]);
+  });
+});
+
+const chunksValid = (png) => {
+  for (let o = 8; o < png.length;) {
+    const len = png.readUInt32BE(o);
+    const crc = png.readUInt32BE(o + 8 + len);
+    assert.equal(crc32(png.subarray(o + 4, o + 8 + len)), crc, `bad CRC at offset ${o}`);
+    o += 12 + len;
+  }
+};
+
+describe('finish', () => {
+  for (const name of ['general', 'gradient', 'tiles']) {
+    it(`${name}: the same pixels in no more bytes, with valid chunks`, async () => {
+      const enc = await engine.encode(await engine.render(icon(name), 128, '#000000'), { colors: 256 });
+      const fin = await engine.finish(enc, { iterations: 15 });
+      assert.ok(fin.length <= enc.length, `${fin.length} > ${enc.length}`);
+      assert.deepEqual([...dec(fin).data], [...dec(enc).data]);
+      chunksValid(Buffer.from(fin));
+    });
+  }
+
+  it('returns its input untouched at zero iterations', async () => {
+    const enc = await engine.encode(await engine.render(icon('flat'), 32), { colors: 256 });
+    assert.equal(await engine.finish(enc, { iterations: 0 }), enc);
+  });
+});
