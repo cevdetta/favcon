@@ -64,7 +64,7 @@ import {
   createSvgStage, DEFAULT_BG, FAST_ZOPFLI_ITERATIONS, FavconError,
   icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZone, ZOPFLI_ITERATIONS,
 } from '../lib/core.mjs';
-import { checkConfig, normaliseOptions, resolveOptions } from '../lib/config.mjs';
+import { checkConfig, defineConfig, normaliseOptions, resolveOptions } from '../lib/config.mjs';
 import { createEngine } from '../lib/engine.mjs';
 import { buildSet } from '../lib/pipeline.mjs';
 
@@ -76,6 +76,7 @@ export { FavconError, icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZo
 // plugin list, because the list lives in core rather than in either caller.
 const { optimiseSvg } = createSvgStage({ optimize, builtinPlugins });
 export { optimiseSvg };
+export { defineConfig };
 
 // The engine's libraries load on first use, inside build(), so a platform without a prebuilt
 // fails with a favcon: message, not an import-time stack trace.
@@ -396,4 +397,9 @@ const isEntryPoint = (url) => {
   } catch { return false; }
 };
 
-if (isEntryPoint(import.meta.url)) await cli(process.argv.slice(2));
+// Not awaited: a config file may import defineConfig from this module, and a top-level await
+// here would keep the module evaluating while cli() imports that file, a cycle that never
+// settles.
+if (isEntryPoint(import.meta.url)) {
+  cli(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (e) => die(e?.message ?? String(e)));
+}

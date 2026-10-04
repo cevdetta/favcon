@@ -7,7 +7,7 @@
   "author": "Cevdet",
   "bin": { "favcon": "bin/favcon.mjs" },
   "exports": {
-    ".": "./bin/favcon.mjs",
+    ".": { "types": "./bin/favcon.d.mts", "default": "./bin/favcon.mjs" },
     "./core": "./lib/core.mjs",
     "./astro": { "types": "./astro/index.d.ts", "default": "./astro/index.mjs" },
     "./astro/middleware": "./astro/middleware.mjs",

@@ -1,7 +1,7 @@
 // The options layer on its own (lib/config.mjs), then the CLI reading a config file, then the
 // types a config file sees.
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -251,5 +251,38 @@ describe('the CLI with a config file', () => {
     const r = await run(dir, ['--sizes', '32', '--bg', '#000', '-o', 'public', 'logo.svg']);
     assert.equal(r.code, 0, r.stderr);
     assert.match(r.stdout, /^release build \(zopfli at 120 iterations\)$/m);
+  });
+});
+
+describe('defineConfig from favcon', () => {
+  it('works in a config file the CLI is loading', async () => {
+    // The config imports the very module the CLI is running. With a top-level await on cli()
+    // that module is still evaluating, the import waits for it, and it waits for the import.
+    const url = pathToFileURL(CLI).href;
+    const dir = project({ 'favcon.config.mjs': `import { defineConfig } from '${url}';\nexport default defineConfig({ ${FAST} });` });
+    const r = await run(dir);
+    assert.equal(r.code, 0, `exit ${r.code}\n${r.stderr}`);
+    assert.ok(existsSync(join(dir, 'public', 'icon-32.png')));
+  });
+
+  it('declares its types through the package exports', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    assert.deepEqual(pkg.exports['.'], { types: './bin/favcon.d.mts', default: './bin/favcon.mjs' });
+    assert.ok(existsSync(join(ROOT, 'bin', 'favcon.d.mts')));
+  });
+
+  const tsc = join(ROOT, 'site', 'node_modules', 'typescript', 'bin', 'tsc');
+  it('type-checks a config, and catches a misspelt key', { skip: existsSync(tsc) ? false : 'typescript not installed' }, () => {
+    const dir = join(scratch, `tsc${++n}`);
+    mkdirSync(dir);
+    const spec = JSON.stringify(CLI.replace(/\\/g, '/'));
+    writeFileSync(join(dir, 'good.mts'), `import { defineConfig } from ${spec};\nexport default defineConfig({ input: 'logo.svg', sizes: [192, 512], bg: null, mode: 'fast', base: '/blog/', manifest: { name: 'x' } });\n`);
+    writeFileSync(join(dir, 'bad.mts'), `import { defineConfig } from ${spec};\nexport default defineConfig({ colours: 8 });\n`);
+    const check = (f) => spawnSync(process.execPath, [tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--skipLibCheck', join(dir, f)], { encoding: 'utf8' });
+    const good = check('good.mts');
+    assert.equal(good.status, 0, good.stdout + good.stderr);
+    const bad = check('bad.mts');
+    assert.notEqual(bad.status, 0, 'a misspelt key type-checked');
+    assert.match(bad.stdout, /colours/);
   });
 });
