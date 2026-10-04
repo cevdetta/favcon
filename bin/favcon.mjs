@@ -71,6 +71,7 @@ import {
   icoWrap, linkTags, manifestJson, maskableFit, nestForMask, normaliseVars,
   placeInSafeZone, squareIconSvg, ZOPFLI_ITERATIONS,
 } from '../lib/core.mjs';
+import { createEngine } from '../lib/engine.mjs';
 
 // Re-exported so the public API is the same as before the split: the Astro
 // integration, the test suite and bench/ all import these from here.
@@ -80,6 +81,22 @@ export { FavconError, icoWrap, linkTags, maskableFit, nestForMask, placeInSafeZo
 // plugin list, because the list lives in core rather than in either caller.
 const { optimiseSvg } = createSvgStage({ optimize, builtinPlugins });
 export { optimiseSvg };
+
+// The engine's libraries load on first use, inside build(), so a platform without a prebuilt
+// fails with a favcon: message, not an import-time stack trace.
+let enginePromise = null;
+export const loadEngine = () => (enginePromise ??= (async () => {
+  try {
+    const [image, zopfli] = await Promise.all([import('@napi-rs/image'), import('@gfx/zopfli')]);
+    return createEngine({ image, zopfli, inflate: (bytes) => inflateSync(bytes) });
+  } catch (e) {
+    enginePromise = null;
+    throw new FavconError(
+      `the image engine did not load on ${process.platform}-${process.arch}: ${e.message}\n` +
+      `       @napi-rs/image ships prebuilt binaries for Linux, macOS, Windows and FreeBSD`,
+    );
+  }
+})());
 
 const execFileAsync = promisify(execFile);
 
