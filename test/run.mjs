@@ -657,6 +657,16 @@ describe('bad input fails clearly', () => {
     assert.match(r.stderr, /^favcon: not an SVG \(no <svg> element found\): notsvg\.txt$/m);
   });
 
+  it('a translucent --bg, which would put alpha in icons declared maskable', { skip: skipNoTools }, async () => {
+    for (const bg of ['transparent', '#ffffff80', 'rgba(0,0,0,0)']) {
+      const out = freshDir();
+      const r = await cli(['--bg', bg, fixture('flat.svg'), '-o', out]);
+      assert.equal(r.code, 1, `--bg ${bg} was accepted`);
+      assert.match(r.stderr, /^favcon: --bg must be opaque/m, `--bg ${bg}: ${r.stderr}`);
+      assert.ok(!existsSync(out), `--bg ${bg} created the output directory`);
+    }
+  });
+
   it('a --bg resvg will not take', { skip: skipNoTools }, async () => {
     const r = await cli(['--bg', 'nonered', fixture('flat.svg'), '-o', freshDir()]);
     assert.equal(r.code, 1);

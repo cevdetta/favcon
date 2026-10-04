@@ -148,7 +148,9 @@ property of your mark and not of the format. `--bg '#fff'` for a mark drawn on l
 
 The value is validated by asking resvg to render a 1×1 pixel with it, so anything resvg takes
 works (`#fff`, `rebeccapurple`, `rgb(14 124 104)`, `hsl(170 80% 27%)`), and the validator can
-never disagree with the renderer.
+never disagree with the renderer. The same pixel must come out opaque: `transparent`,
+`rgba(…, 0.5)` or `#ffffff80` would put alpha into icons declared maskable, so favcon refuses
+them and points you to `--bg none`.
 
 ### The padded icons
 
