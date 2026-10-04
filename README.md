@@ -107,6 +107,35 @@ as small as they can be, this one.
 Long options also accept `--opt=value`; `--` ends option parsing. A flag that takes no
 argument rejects one.
 
+### A config file
+
+Every option can live in `favcon.config.js`, `favcon.config.mjs` or `favcon.config.ts` in the
+working directory, the first one found. Flags win over it, and `--var` merges with its `vars`
+by name. Three keys have no flag: `input`, so a bare `favcon` builds the project's mark;
+`base`, the path the site is served under; and `mode`.
+
+```js
+// favcon.config.mjs
+import { defineConfig } from 'favcon'
+
+export default defineConfig({
+  input: 'src/logo.svg',
+  out: 'public',
+  bg: '#0E1C28',
+  base: '/blog/',
+  manifest: { name: 'Example', short_name: 'Ex', theme_color: '#0E7C68' },
+})
+```
+
+`base` prefixes every `href` that `--html` prints and every icon `src` in the manifest.
+`manifest` as an object writes `site.webmanifest` with those members ahead of the icons.
+`mode: 'fast'` runs zopfli at 15 iterations instead of 120: `general.svg` at the defaults builds
+in 9.4 s against 27.7 s, and the bytes are not the release ones. The summary's last line says
+which mode ran.
+
+A `.ts` config loads through Node's type stripping, which erases annotations and transforms
+nothing: an `enum` or a `namespace` fails with a message pointing at `favcon.config.mjs`.
+
 ### `--var`
 
 Your mark can be a template. `var(--brand, #0E7C68)` renders as `#0E7C68` by default, the way

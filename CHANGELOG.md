@@ -52,8 +52,12 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 - The integration refuses to overwrite a file in `public/` it did not write itself, checked by
   content rather than by filename. A file that already matches what it was about to write is
   left alone, so a clean install does not accuse you of hand-editing your own favicon.
-- `build()`, `optimiseSvg()`, `icoWrap()`, `engineVersions()` and `FavconError` are exported.
-  `build()` throws; the CLI still exits.
+- `build()`, `defineConfig()`, `optimiseSvg()`, `icoWrap()`, `engineVersions()` and
+  `FavconError` are exported, with types. `build()` throws; the CLI still exits.
+- **A config file.** `favcon.config.js`, `.mjs` or `.ts` in the working directory sets any
+  option, plus `input`, `base` and `mode`, which have no flag. Flags win; `--var` merges by
+  name. `defineConfig` is exported from `favcon` with types. `base` reaches the `--html` links
+  and the manifest's icon URLs, and the summary names the mode.
 - `test/run.mjs`: the definition of done as `node:test`, with a PNG reader and an accuracy
   gate written over `node:zlib`. No bash, no ImageMagick.
 - `bench/bench.mjs`: sweeps palette size, dither, stage order, zopfli iterations and the ICO
