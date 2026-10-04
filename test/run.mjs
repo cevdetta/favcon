@@ -789,6 +789,27 @@ describe('rendering', { skip: skipNoTools }, () => {
     assert.notDeepEqual([...icon32], [...payload]);
   });
 
+  it('squares a viewBox within 1 % of square, without a warning', async () => {
+    // Below 1 % the mark used to be left unsquared, and resvg then derived the second side:
+    // 100x101 failed with "ICO payload is 32x33", and 101x100 under --bg none wrote a
+    // 512x507 icon-512.png that the manifest declared 512x512.
+    for (const [w, h] of [[100, 101], [101, 100]]) {
+      const src = join(scratch, `near-${w}x${h}.svg`);
+      writeFileSync(src, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">` +
+        `<rect x="10" y="10" width="${w - 20}" height="${h - 20}" fill="#1f3a5f"/></svg>`);
+      const out = freshDir();
+      const r = await cli(['--bg', 'none', '--sizes', '192 512', '-o', out, src]);
+      assert.equal(r.code, 0, `${w}x${h}: ${r.stderr}`);
+      assert.ok(!/not square/.test(r.stderr), `${w}x${h} warned: ${r.stderr}`);
+      for (const [file, px] of [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]]) {
+        const hd = header(readFileSync(join(out, file)));
+        assert.deepEqual([hd.width, hd.height], [px, px], `${w}x${h}: ${file}`);
+      }
+      const ico = readFileSync(join(out, 'favicon.ico'));
+      assert.deepEqual([header(ico.subarray(22)).width, header(ico.subarray(22)).height], [32, 32], `${w}x${h}: ICO payload`);
+    }
+  });
+
   it('warns on a non-square viewBox, and still emits square rasters', async () => {
     const out = freshDir();
     const r = await cli(['--bg', '#fff', '--sizes', '32', '-o', out, fixture('wide.svg')]);
