@@ -9,11 +9,11 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "^5.0.0",
-    "svgo": "^4.1.0",
-    "@resvg/resvg-wasm": "^2.6.2",
-    "@jsquash/png": "^3.1.1",
     "@jsquash/oxipng": "^2.3.0",
-    "image-q": "^4.0.0"
+    "@jsquash/png": "^3.1.1",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "astro": "^7.3.5",
+    "image-q": "^4.0.0",
+    "svgo": "^4.1.0"
   }
 }

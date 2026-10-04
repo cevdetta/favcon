@@ -1,0 +1,23 @@
+# One workspace, one lockfile. The root is the published package; site/ is the website, which
+# imports lib/core.mjs by path rather than as a dependency, so nothing here links the two.
+packages:
+  - site
+
+# pnpm blocks dependency lifecycle scripts until each one is decided here. `false` is a
+# recorded "no", not an oversight: pnpm otherwise fails the install asking to be told.
+#
+#   pngquant-bin - yes. Its postinstall is what downloads the pngquant binary; without it the
+#   optional dependency installs as an empty shim and the PATH resolver falls through to the
+#   system pngquant (bin/favcon.mjs, tier 2). It is optional precisely because this script
+#   fails on the platform it has no prebuilt for (linux/arm64; its macOS binary is universal).
+#
+#   esbuild - no. Pulled in under Astro, under site/. Its platform binary arrives as an
+#   optional dependency; the postinstall only re-validates it, and `pnpm --filter
+#   favcon-site build` produces the full site without it.
+#
+#   sharp - no. Astro's image service; the site has no <Image> and no raster assets to
+#   transform, and its icons are built by favcon itself.
+allowBuilds:
+  pngquant-bin: true
+  esbuild: false
+  sharp: false

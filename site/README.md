@@ -4,7 +4,7 @@ The third of the three: the [CLI](../bin/favcon.mjs), the [Astro integration](..
 this. Drop an SVG, get the set, nothing leaves the tab.
 
 ```sh
-npm install && npm run dev
+pnpm install && pnpm --filter favcon-site dev   # from the repo root
 ```
 
 ## What it shares with the CLI

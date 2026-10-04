@@ -15,6 +15,7 @@
     "./package.json": "./package.json"
   },
   "engines": { "node": ">=22.12" },
+  "packageManager": "pnpm@12.3.4",
   "files": ["bin", "lib", "astro", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node --test test/run.mjs",
@@ -27,7 +28,7 @@
     "pngquant-bin": "^9.0.0"
   },
   "peerDependencies": {
-    "astro": ">=4.0.0"
+    "astro": "^7.3.5"
   },
   "peerDependenciesMeta": {
     "astro": { "optional": true }

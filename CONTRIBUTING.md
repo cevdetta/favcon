@@ -10,7 +10,7 @@ byte delta and proof that every fixture is still inside the accuracy bar. "Looks
 not evidence, and neither is a screenshot.
 
 ```sh
-npm test                       # the definition of done, as node:test
+pnpm test                      # the definition of done, as node:test
 node bench/bench.mjs           # every sweep, printed
 node bench/bench.mjs colors    # just one
 node bench/bench.mjs --write   # regenerate docs/BENCHMARKS.md
@@ -36,7 +36,7 @@ Two more traps this repo has already fallen into, both caught only by measuring:
 ## Setting up
 
 ```sh
-npm install
+pnpm install                   # the root and site/, one workspace, one lockfile
 # plus the three binaries - see the README's install matrix
 resvg --version && pngquant --version && oxipng --version
 ```
