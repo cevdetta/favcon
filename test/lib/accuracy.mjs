@@ -13,16 +13,10 @@
 // 16 px almost every pixel is an anti-aliasing edge, so one RMSE threshold would either wave
 // through the large sizes or fail every small one.
 
-import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
-import { placeInSafeZone } from '../../bin/favcon.mjs';
+import { readFileSync } from 'node:fs';
+import { loadEngine, placeInSafeZone } from '../../bin/favcon.mjs';
 import { decode } from './png.mjs';
 import { resolveVars } from './resolve.mjs';
-
-const execFileAsync = promisify(execFile);
 
 export const THRESHOLD_PCT = 1.0;
 const CHANNEL_TOLERANCE = 8;      // out of 255
@@ -39,43 +33,29 @@ const CHANNEL_TOLERANCE = 8;      // out of 255
  * The placement is shared on purpose (the gate is about pixels, not about re-deriving where
  * the mark goes), and the masked-icon tests check the placement itself.
  */
-export async function reference(resvgPath, { source, px, bg, vars, fitted = false, padding = 'auto' }) {
-  const dir = mkdtempSync(join(tmpdir(), 'favcon-ref.'));
-  try {
-    let svg = resolveVars(readFileSync(source, 'utf8'), vars);
-    // Match what favcon does to a non-square mark, so the gate measures quantisation error
-    // rather than the framing difference it would otherwise see at every single pixel.
-    const vb = /\bviewBox\s*=\s*"([^"]*)"/.exec(svg);
-    if (vb) {
-      const [, , w, h] = vb[1].trim().split(/[\s,]+/).map(Number);
-      if (w > 0 && h > 0 && w !== h) {
-        const box = Math.max(w, h);
-        svg = svg.replace(/<svg\b/, `<svg width="${box}" height="${box}" preserveAspectRatio="none"`);
-      }
+export async function reference({ source, px, bg, vars, fitted = false, padding = 'auto' }) {
+  const engine = await loadEngine();
+  let svg = resolveVars(readFileSync(source, 'utf8'), vars);
+  // Match what favcon does to a non-square mark, so the gate measures quantisation error
+  // rather than the framing difference it would otherwise see at every pixel.
+  const vb = /\bviewBox\s*=\s*"([^"]*)"/.exec(svg);
+  if (vb) {
+    const [, , w, h] = vb[1].trim().split(/[\s,]+/).map(Number);
+    if (w > 0 && h > 0 && w !== h) {
+      const box = Math.max(w, h);
+      svg = svg.replace(/<svg\b/, `<svg width="${box}" height="${box}" preserveAspectRatio="none"`);
     }
-    const src = join(dir, 'ref.svg'), out = join(dir, 'ref.png');
-    if (fitted) {
-      let n = 0;
-      // placeInSafeZone takes DECODED pixels, so that the website can hand it the output of a
-      // WASM codec without carrying Node's PNG reader. The reference path decodes with the
-      // suite's own reader, by design a different one from favcon's, so a bug in either
-      // cannot cancel itself out here.
-      const render = async (text, size) => {
-        const f = join(dir, `place-${n}.svg`), p = join(dir, `place-${n++}.png`);
-        writeFileSync(f, text);
-        await execFileAsync(resvgPath, ['--quiet', '-w', String(size), '-h', String(size), f, p]);
-        const img = decode(readFileSync(p));
-        return { width: img.width, height: img.height, rgba: img.data };
-      };
-      svg = (await placeInSafeZone(svg, render, px, padding)).svg;
-    }
-    writeFileSync(src, svg);
-    await execFileAsync(resvgPath, ['--quiet', '-w', String(px), '-h', String(px),
-                                    ...(bg ? ['--background', bg] : []), src, out]);
-    return decode(readFileSync(out));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
+  if (fitted) {
+    // The suite decodes with its own PNG reader, a different one from the engine's rawPixels,
+    // so a bug in either cannot cancel itself out here.
+    const render = async (text, size) => {
+      const img = decode(Buffer.from(await engine.render(text, size)));
+      return { width: img.width, height: img.height, rgba: img.data };
+    };
+    svg = (await placeInSafeZone(svg, render, px, padding)).svg;
+  }
+  return decode(Buffer.from(await engine.render(svg, px, bg ?? undefined)));
 }
 
 const composite = (img, ground) => {
