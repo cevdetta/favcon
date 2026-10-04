@@ -49,7 +49,9 @@ const cli = async (args, opts = {}) => {
 const builds = new Map();
 const buildOnce = (key, options) => {
   if (!builds.has(key)) {
-    const out = join(scratch, `build-${key}`);
+    // The key is a memo key, not a file name: JSON in it puts " and : into the path, which
+    // Windows refuses. A counter keeps the directory unique, the slug keeps it readable.
+    const out = join(scratch, `build-${builds.size}-${key.replace(/[^\w-]+/g, '_')}`);
     builds.set(key, build({ out, ...options }).then((r) => ({ ...r, out })));
   }
   return builds.get(key);
