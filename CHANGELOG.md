@@ -97,6 +97,10 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Fixed
 
+- **`<desc>` no longer reaches `icon.svg` or `logo.svg`.** svgo's `removeDesc` keeps any
+  description that is not empty or an editor stamp, unless told otherwise; `general.svg`'s
+  87-byte description was 30 % of its 289-byte `icon.svg`. The rasters are byte-identical.
+
 - **Non-square marks produced non-square rasters.** resvg does not stretch to fill `-w N -h N`:
   it preserves the aspect ratio and derives the second dimension, so a 128×64 mark came out
   32×16 and the ICO header disagreed with its own payload. `icon.svg` now carries a square
