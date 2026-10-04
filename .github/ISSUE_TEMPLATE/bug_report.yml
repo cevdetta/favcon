@@ -15,7 +15,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: "Please paste the output of: `favcon -V && node -v && resvg --version && pngquant --version && oxipng --version`"
+      description: "Please paste the output of: `favcon -V && node -v` (favcon -V includes the engine versions)"
       render: shell
     validations: { required: true }
   - type: textarea
