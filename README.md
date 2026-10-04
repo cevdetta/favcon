@@ -12,10 +12,10 @@ mark is animated.
 ```
 logo.svg                  202 B  static (no animation in the source)
 icon.svg                  202 B
-favicon.ico               463 B
+favicon.ico               462 B
 apple-touch-icon.png     1092 B  mark at 142px of 180 in the safe zone
-icon-192.png             1160 B  mark at 152px of 192 in the safe zone
-icon-512.png             2721 B  mark at 408px of 512 in the safe zone
+icon-192.png             1163 B  mark at 152px of 192 in the safe zone
+icon-512.png             2704 B  mark at 408px of 512 in the safe zone
 ```
 
 (That is `test/fixtures/general.svg`, a two-colour mark, at the defaults. Your bytes depend on
@@ -23,8 +23,8 @@ your mark; `node bench/bench.mjs` measures the whole corpus.)
 
 No install at all: **[favcon.cevdet.ch](https://favcon.cevdet.ch)** runs the same SVG stage in
 your browser, with nothing uploaded. Its SVGs are byte-identical to the CLI's; its PNGs come
-from WASM substitutes for the three binaries and land within a few percent of the CLI's, and
-the page shows the numbers.
+from a substitute raster stage in WASM and land within a few percent of the CLI's, and the page
+shows the numbers.
 
 Add the links to your `<head>`. `favcon --html` prints them:
 
@@ -36,28 +36,11 @@ Add the links to your `<head>`. `favcon --html` prints them:
 
 ## Install
 
-favcon is a small orchestrator around three binaries it does not bundle. You need all three.
-
-| | macOS | Debian/Ubuntu | Arch | Anywhere |
-|---|---|---|---|---|
-| **resvg** | `brew install resvg` | tarball from [releases](https://github.com/linebender/resvg/releases) | `pacman -S resvg` | `cargo install resvg` |
-| **oxipng** | `brew install oxipng` | `.deb` from [releases](https://github.com/oxipng/oxipng/releases) | `pacman -S oxipng` | `cargo install oxipng` |
-| **pngquant** | `brew install pngquant` | `apt install pngquant` | `pacman -S pngquant` | [pngquant.org](https://pngquant.org) |
-
-pngquant is also an `optionalDependency` (`pngquant-bin`), so on a platform it has a prebuilt
-for, it arrives with favcon. It has no `linux/arm64` build and its install chain is elderly,
-which is why it is optional: a failed install is a warning, not a broken `npm i`. (Its macOS
-binary is universal, so Apple Silicon is covered.)
-
-If favcon cannot find something, it says so: all of them at once, with the install lines.
-`FAVCON_RESVG`, `FAVCON_PNGQUANT` and `FAVCON_OXIPNG` point it at a specific binary.
-
-For CI, prefer pinned release tarballs over `cargo install`: they land in seconds instead of
-minutes, and they pin the exact toolchain your byte counts were measured with. See
-`.github/workflows/ci.yml` for a worked example. Note that upstream resvg has shipped no
-Windows binary since v0.47.0.
-
-Node 24 or newer.
+`npx favcon logo.svg --out public` needs Node 24 or newer and nothing else. The image engine,
+[`@napi-rs/image`](https://www.npmjs.com/package/@napi-rs/image), installs with the package:
+resvg, oxipng and a quantiser in one native module, prebuilt for Linux, macOS and Windows on
+x64 and arm64, and FreeBSD on x64. [`@gfx/zopfli`](https://www.npmjs.com/package/@gfx/zopfli),
+the zopfli pass, is WASM and runs anywhere Node does.
 
 ## What you get
 
@@ -93,8 +76,8 @@ files for platforms that stopped existing), and its PNGs are whatever sharp's en
 sharp's `quality: 60` and `favgen` at `colors: 64`: one quantised encode, no comparison, no
 zopfli.
 
-favcon does fewer files and more work on each: quantise, compare three candidate encodings,
-and recompress the winner with zopfli. The test suite holds the default output to a
+favcon does fewer files and more work on each: quantise, compare the quantised and the
+lossless encode, and recompress the winner with zopfli. The test suite holds the default output to a
 pixel-accuracy bar (no more than 1 % of pixels off by a visible amount) rather than taking it
 on trust ([docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the numbers). It also does the thing
 none of them do: it keeps your animation in one file and guarantees it is *absent* from the
@@ -147,7 +130,7 @@ property of your mark and not of the format. `--bg '#fff'` for a mark drawn on l
 `--bg none` to keep the alpha (and with it an unpadded set, declared `"any"` only).
 
 The value is validated by asking resvg to render a 1×1 pixel with it, so anything resvg takes
-works (`#fff`, `rebeccapurple`, `rgb(14 124 104)`, `hsl(170 80% 27%)`), and the validator can
+works (`#fff`, `teal`, `rgb(14 124 104)`, `hsl(170 80% 27%)`), and the validator can
 never disagree with the renderer. The same pixel must come out opaque: `transparent`,
 `rgba(…, 0.5)` or `#ffffff80` would put alpha into icons declared maskable, so favcon refuses
 them and points you to `--bg none`.
@@ -272,14 +255,14 @@ favcon({
 
 **It does not rebuild on every dev-server restart.** The cache is content-addressed, not a
 heuristic: keyed on favcon's version, the input bytes, the canonicalised options **and the
-`--version` strings of resvg, pngquant and oxipng**. That last part is what makes it correct:
-all three change their output across releases, so a cache keyed only on the SVG would hand
-back stale files after a `brew upgrade`, with no sign of it. A hit hardlinks into `public/` in
+versions of `@napi-rs/image` and `@gfx/zopfli`**. That last part is what makes it correct:
+both change their output across releases, so a cache keyed only on the SVG would hand back
+stale files after an upgrade, with no sign of it. A hit hardlinks into `public/` in
 single-digit milliseconds.
 
-For a cold first run, `dev: 'fast'` (the default) builds one 256 px size with zopfli
-off: under a second instead of the full build's ~30 s, since zopfli is ~98 % of the wall clock.
-Dev artefacts are not the production bytes, by design.
+For a cold first run, `dev: 'fast'` (the default) builds one 256 px size with zopfli at 15
+iterations instead of 120: 1.6 s against 5.3 s for the same set in release mode. Dev artefacts
+are not the production bytes, by design.
 
 **Head tags.** Astro has no official head-injection hook. All four `injectScript` stages are
 JavaScript, and a `<link rel="icon">` written by a script is found after the browser has
@@ -300,21 +283,25 @@ Every step was chosen by measurement. The reasoning is in
 
 The short version, because these are the parts that look wrong until you know why:
 
-- **Quantise before you recompress.** pngquant re-encodes from scratch, so any order ending in
-  pngquant throws away everything oxipng did. Measured at 192 px, the wrong order is 19.7 %
-  bigger.
+- **One engine, nothing to install.** `@napi-rs/image` bundles the resvg and oxipng versions
+  favcon was measured with, and its renders match the resvg CLI pixel for pixel. Against the
+  native resvg, pngquant and oxipng pipeline its encodes are 9 % smaller on a gradient and
+  0.46 % larger on flat marks (decision 26).
+- **Quantise before you recompress.** The quantiser re-encodes from scratch, so any order
+  ending in quantisation throws away everything the recompressor did. Measured at 192 px, the
+  wrong order is 21.0 % bigger.
 - **An ICO holding a PNG is a 22-byte header plus that PNG verbatim**, so nothing can be
   optimised after packing. favcon writes that header itself, byte-identical to
   `icotool -c -r`, which removes the only dependency with no npm package and no Windows build.
   The BMP payload `icotool` writes by default is 16× larger.
 - **Zopfli runs once**, on the file that already won the lossy/lossless comparison. Running it
   on both sides costs three times as much for identical bytes.
-- **The rasters are built one at a time on purpose.** Zopfli is ~98 % of wall clock, so
-  overlapping looked obvious. But four jobs at once burn about 40 % more CPU for 1.6 % less wall
-  clock (22.06 s serial, 21.72 s concurrent, inside the run-to-run spread). The extra cores go
-  into contention, not work.
+- **The rasters are built one at a time on purpose.** zopfli runs on one thread, so a worker
+  per size looked obvious. It saved 13.5 %, because the 512 px icon alone takes as long as the
+  whole parallel build, and no core count gets past that (decision 27).
 
 ## Licence
 
-MIT. favcon *spawns* pngquant (GPL-3.0-or-later) and resvg (`Apache-2.0 OR MIT`) across a
-process boundary: mere aggregation, no linking.
+MIT. favcon spawns nothing. `@napi-rs/image` is MIT (its quantiser has been clean-room MIT
+code since 1.13.0), the resvg inside it is `Apache-2.0 OR MIT`, and `@gfx/zopfli` is
+Apache-2.0. The dependency tree holds no GPL code.
