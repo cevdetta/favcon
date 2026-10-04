@@ -97,7 +97,7 @@ oxipng then pngquant  18937 B  (21.0 %)
 
 ## Zopfli iterations
 
-The default is 15. Bytes ship forever and build time does not, so the knee is taken on the byte side, but the curve is flat past 120.
+The baseline is 15, oxipng's default and the fast mode's count; release builds use 120. Bytes ship forever and build time does not, so the knee is taken on the byte side, but the curve is flat past 120.
 
 ```
   --zi     bytes    vs 15   seconds

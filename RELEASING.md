@@ -10,7 +10,7 @@ favcon is one package, `favcon`. Registry commands use pnpm, which keeps its own
   the tarball on npm through trusted publishing (OIDC, with provenance). Nothing goes live until
   the maintainer approves it with 2FA.
 
-Byte-output changes (a bumped resvg, pngquant or oxipng, or any pipeline change) are **minor at
+Byte-output changes (a bumped `@napi-rs/image` or `@gfx/zopfli`, or any pipeline change) are **minor at
 minimum**, never patch: downstream users diff these files into git.
 
 ## Before 0.1.0: one-time setup
@@ -110,9 +110,9 @@ On an up-to-date `main` with a clean working tree and CI green:
    git push origin vX.Y.Z
    ```
 
-3. The Release workflow checks the tag against `package.json`, runs the test suite with the
-   same pinned resvg, oxipng and apt pngquant as CI, packs, stages that exact tarball, and
-   creates the GitHub Release from the changelog section.
+3. The Release workflow checks the tag against `package.json`, runs the test suite as CI does
+   (the engine from the lockfile, resvg 0.48.1 as the render test's reference), packs, stages
+   that exact tarball, and creates the GitHub Release from the changelog section.
 4. Approve with 2FA:
 
    ```sh

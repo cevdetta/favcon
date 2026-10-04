@@ -23,8 +23,8 @@ your mark; `node bench/bench.mjs` measures the whole corpus.)
 
 No install at all: **[favcon.cevdet.ch](https://favcon.cevdet.ch)** runs the same SVG stage in
 your browser, with nothing uploaded. Its SVGs are byte-identical to the CLI's; its PNGs come
-from a substitute raster stage in WASM and land within a few percent of the CLI's, and the page
-shows the numbers.
+from a substitute raster stage in WASM: within a few percent of the CLI's on flat marks, 14 %
+larger on a gradient, and the page shows the numbers.
 
 Add the links to your `<head>`. `favcon --html` prints them:
 
@@ -293,7 +293,7 @@ The short version, because these are the parts that look wrong until you know wh
 - **An ICO holding a PNG is a 22-byte header plus that PNG verbatim**, so nothing can be
   optimised after packing. favcon writes that header itself, byte-identical to
   `icotool -c -r`, which removes the only dependency with no npm package and no Windows build.
-  The BMP payload `icotool` writes by default is 16× larger.
+  The BMP payload `icotool` writes by default is 8.8× larger on the fixtures.
 - **Zopfli runs once**, on the file that already won the lossy/lossless comparison. Running it
   on both sides costs three times as much for identical bytes.
 - **The rasters are built one at a time on purpose.** zopfli runs on one thread, so a worker

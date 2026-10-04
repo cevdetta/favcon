@@ -120,16 +120,16 @@ const outputs = [
       the file differs by whatever the PNG differs by.
     </p>
     <p>
-      <strong>The PNGs differ</strong>, because the three programs the CLI shells out to have no
-      browser equivalents, only substitutes:
+      <strong>The PNGs differ</strong>, because this page still runs its own substitutes for the
+      CLI's image engine:
     </p>
     <div>
       <table>
         <thead><tr><th>stage</th><th>command line</th><th>this page</th></tr></thead>
         <tbody>
-          <tr><td>render</td><td>resvg 0.48.1</td><td><code>@resvg/<wbr />resvg-wasm</code> 2.6.2</td></tr>
-          <tr><td>quantise</td><td>pngquant (libimagequant)</td><td><code>image-q</code>, a different algorithm</td></tr>
-          <tr><td>recompress</td><td>oxipng <code>-o max --zopfli --zi 120</code></td><td><code>@jsquash/<wbr />oxipng</code> level 6 (<strong>no zopfli</strong>)</td></tr>
+          <tr><td>render</td><td>resvg 0.48.1, in <code>@napi-rs/<wbr />image</code></td><td><code>@resvg/<wbr />resvg-wasm</code> 2.6.2</td></tr>
+          <tr><td>quantise</td><td><code>@napi-rs/<wbr />image</code>'s quantiser</td><td><code>image-q</code>, a different algorithm</td></tr>
+          <tr><td>recompress</td><td>oxipng, then <code>@gfx/<wbr />zopfli</code> at 120 iterations</td><td><code>@jsquash/<wbr />oxipng</code> level 6 (<strong>no zopfli</strong>)</td></tr>
         </tbody>
       </table>
     </div>
@@ -139,15 +139,16 @@ const outputs = [
         <thead><tr><th>mark</th><th>CLI</th><th>here</th><th></th></tr></thead>
         <tbody>
           <tr><td>flat, pixel grid</td><td>600&nbsp;B</td><td>620&nbsp;B</td><td>+3.3%</td></tr>
-          <tr><td>dense geometry</td><td>5370&nbsp;B</td><td>5043&nbsp;B</td><td>−6.1%</td></tr>
-          <tr><td>two-colour mark</td><td>4973&nbsp;B</td><td>5079&nbsp;B</td><td>+2.1%</td></tr>
-          <tr><td>radial gradient</td><td>27380&nbsp;B</td><td>29642&nbsp;B</td><td>+8.3%</td></tr>
+          <tr><td>dense geometry</td><td>5343&nbsp;B</td><td>5043&nbsp;B</td><td>−5.6%</td></tr>
+          <tr><td>two-colour mark</td><td>4959&nbsp;B</td><td>5079&nbsp;B</td><td>+2.4%</td></tr>
+          <tr><td>radial gradient</td><td>25946&nbsp;B</td><td>29642&nbsp;B</td><td>+14.2%</td></tr>
         </tbody>
       </table>
     </div>
     <p>
-      Within a few percent either way: the missing zopfli costs bytes, and a different
-      quantiser can win them back, as it does on the dense mark. Close is not the same, though,
+      Within a few percent on the three flat marks and 14.2&nbsp;% larger on the gradient: the
+      missing zopfli costs bytes, and a different quantiser can win some back, as it does on the
+      dense mark. Close is not the same, though,
       and it is why this page will not tell you what your icons will weigh.
     </p>
     <p>
