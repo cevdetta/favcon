@@ -1,0 +1,27 @@
+---
+// Not optional on Cloudflare Pages: without a top-level 404.html it assumes a single-page app
+// and answers every unknown path with index.html and a 200, which is a soft 404 and a
+// duplicate of the home page for every URL anyone mistypes. noindex, and no canonical or Open
+// Graph block: this page is not a place.
+import '../styles/app.css';
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Not found: favcon</title>
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="/favicon.ico" sizes="32x32" />
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="robots" content="noindex" />
+</head>
+<body>
+<header>
+  <h1><img src="/logo.svg" alt="" width="40" height="40" />favcon</h1>
+  <p>Nothing lives at this address.</p>
+  <p><a href="/">Make a favicon set from one SVG</a></p>
+</header>
+</body>
+</html>

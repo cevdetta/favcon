@@ -1,0 +1,7 @@
+node_modules/
+bench/out/
+*.tgz
+.DS_Store
+site/dist/
+site/node_modules/
+site/.astro/

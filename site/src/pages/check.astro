@@ -1,0 +1,84 @@
+---
+// A self-check page, in the spirit of the CLI's test suite: it runs the real browser pipeline
+// over a fixture and prints what came out, so "does this work in a browser" is a page you can
+// open rather than a claim. test/cdp-check.mjs drives it in headless Chromium.
+//
+// The fixture is imported INSIDE the module script below, not here and passed via define:vars:
+// define:vars implies is:inline, Astro then leaves the script unprocessed, and its relative
+// import resolves against the site root and 404s. That failure is indistinguishable from a hang.
+---
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>favcon browser self-check</title>
+<meta name="robots" content="noindex" /></head>
+<body>
+<h1>favcon browser self-check</h1>
+<p>Runs the pipeline over four fixtures in this tab, flat to gradient.</p>
+<pre id="out">running…</pre>
+<script>
+  import { buildInBrowser } from '../lib/pipeline.mjs';
+  // Four marks, not one: a flat pixel-grid mark is the easy case for a quantiser, and a
+  // gradient is the hard one. Reporting only the first would flatter the page.
+  import tiles from '../../../test/fixtures/tiles.svg?raw';
+  import general from '../../../test/fixtures/general.svg?raw';
+  import gradient from '../../../test/fixtures/gradient.svg?raw';
+  import heavy from '../../../test/fixtures/heavy.svg?raw';
+
+  const out = document.getElementById('out');
+  const lines = [];
+  const sig = [0x89, 0x50, 0x4e, 0x47];
+  try {
+    for (const [name, svg] of [['tiles', tiles], ['general', general], ['gradient', gradient], ['heavy', heavy]]) {
+      const t0 = performance.now();
+      const built = await buildInBrowser(svg, { sizes: [192, 512], bg: '#000000' });
+      lines.push(`mark ${name} ms=${Math.round(performance.now() - t0)} animated=${built.animated}`);
+      for (const f of built.files) lines.push(`  file ${name} ${f.name} ${f.bytes.length}`);
+      lines.push(`  fit ${name} apple=${built.fit.apple.box}/${built.fit.apple.canvas}` +
+                 ` icon512=${built.fit.icons[512].box}/${built.fit.icons[512].canvas}` +
+                 ` snapped=${built.fit.icons[512].snapped}`);
+      // A byte count alone would not notice a pipeline emitting plausible-looking rubbish.
+      for (const f of built.files) {
+        if (f.name.endsWith('.png') && !sig.every((b, i) => f.bytes[i] === b)) throw new Error(`${name}/${f.name} is not a PNG`);
+        if (f.name.endsWith('.svg') && new TextDecoder().decode(f.bytes.slice(0, 4)) !== '<svg') throw new Error(`${name}/${f.name} is not an SVG`);
+      }
+      const ico = built.files.find((f) => f.name === 'favicon.ico');
+      if (!ico || ![0, 0, 1, 0].every((b, i) => ico.bytes[i] === b)) throw new Error(`${name}: bad ICO header`);
+      if (built.archive().length < 100) throw new Error(`${name}: the archive is empty`);
+      if (built.files.some((f) => f.name.startsWith('icon-maskable'))) {
+        throw new Error(`${name}: the browser still writes a separate maskable icon`);
+      }
+      const manifest = JSON.parse(new TextDecoder().decode(
+        built.files.find((f) => f.name === 'site.webmanifest').bytes));
+      if (manifest.icons[0].purpose !== 'any maskable') {
+        throw new Error(`${name}: manifest purpose is ${manifest.icons[0].purpose}`);
+      }
+    }
+    // Invalid options must fail with the same messages as the CLI, not with near-empty icons
+    // and no message, or an "internal error" from the placement maths.
+    for (const bad of ['foo', 90, -5]) {
+      let threw = null;
+      try {
+        await buildInBrowser(tiles, { colors: 8, sizes: [192], bg: '#000000', padding: bad });
+      } catch (e) { threw = e?.message ?? String(e); }
+      if (!threw || !/--padding must be 'auto' or a percentage 0-45/.test(threw)) {
+        throw new Error(`padding ${JSON.stringify(bad)} was accepted (${threw ?? 'no error'})`);
+      }
+    }
+    {
+      let threw = null;
+      try {
+        await buildInBrowser(tiles, { colors: 8, sizes: [33], bg: '#000000' });
+      } catch (e) { threw = e?.message ?? String(e); }
+      if (!threw || !/--sizes takes even pixel sizes/.test(threw)) {
+        throw new Error(`sizes [33] was accepted (${threw ?? 'no error'})`);
+      }
+    }
+    lines.push('OK');
+  } catch (e) {
+    lines.push(`FAIL ${e?.message ?? e}`);
+  }
+  out.textContent = lines.join('\n');
+</script>
+</body>
+</html>

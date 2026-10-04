@@ -1,0 +1,17 @@
+# favcon
+
+> One SVG in, an optimised favicon set out. A Node CLI (`npx favcon logo.svg --out public`), an Astro integration (`favcon/astro`), and this website, which runs the same SVG stage in the browser with nothing uploaded.
+
+favcon writes `logo.svg` (the mark, animation intact), `icon.svg` (the browser favicon, animation stripped), a 32x32 `favicon.ico` holding a PNG, `apple-touch-icon.png`, and `icon-192.png`/`icon-512.png` placed in the maskable safe zone, plus an optional `site.webmanifest`. Every PNG is quantised with pngquant and recompressed with oxipng and zopfli; the CLI needs the `resvg`, `pngquant` and `oxipng` binaries. The website's SVGs are byte-identical to the CLI's; its PNGs come from WASM substitutes and land within a few percent of the CLI's.
+
+## Docs
+
+- [README](https://github.com/cevdetta/favcon/blob/main/README.md): install, flags, output, the Astro integration
+- [Decisions](https://github.com/cevdetta/favcon/blob/main/docs/DECISIONS.md): every pipeline choice and the measurement behind it
+- [Benchmarks](https://github.com/cevdetta/favcon/blob/main/docs/BENCHMARKS.md): bytes and accuracy over the test fixtures
+- [Changelog](https://github.com/cevdetta/favcon/blob/main/CHANGELOG.md)
+
+## Optional
+
+- [npm package](https://www.npmjs.com/package/favcon)
+- [Source](https://github.com/cevdetta/favcon)

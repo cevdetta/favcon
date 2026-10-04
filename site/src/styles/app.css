@@ -1,0 +1,105 @@
+/* One stylesheet, no framework, inlined into the page. The page is a form, three tables and an
+   aside, so elements are styled as themselves and a class appears only where one is ambiguous. */
+:root {
+  color-scheme: light dark;
+  --ink: light-dark(#17202a, #e7edf3);
+  --quiet: light-dark(#5b6875, #9aa7b4);
+  --line: light-dark(#d9e0e7, #2b3643);
+  --card: light-dark(#fff, #161d26);
+  --page: light-dark(#f4f6f8, #0e141b);
+  /* The logo's two colours: #a6560a is 5.3:1 on white, #ca8a10 6.3:1 on the dark page. */
+  --accent: light-dark(#a6560a, #ca8a10);
+  --bad: light-dark(#c0392b, #ef8a7d);
+  accent-color: var(--accent);
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.6 system-ui, sans-serif;
+}
+body { max-inline-size: 52rem; margin: 0 auto; padding: clamp(1.5rem, 6vw, 3rem) 1rem 4rem; }
+h1 { display: flex; align-items: center; gap: 0.6rem; margin: 0; font-size: 2.25rem; line-height: 1.2; letter-spacing: -0.02em; }
+h1 + p { margin: 0.25rem 0 0.75rem; font-size: 1.125rem; }
+h2, h3 { margin: 1.5rem 0 0.5rem; font-size: 1.1rem; text-wrap: balance; }
+h2 { margin-top: 0; }
+p { text-wrap: pretty; }
+small, body > footer { color: var(--quiet); font-size: 0.875rem; font-weight: 400; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; }
+code { font-size: 0.875em; }
+
+/* minmax(0, 1fr) rather than a bare grid: a card must not grow past the viewport to fit an
+   unbreakable table cell, which is what clipped the page at phone widths. */
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; margin-block: 2rem; }
+main > * { padding: 1.25rem clamp(1rem, 4vw, 1.5rem); background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+aside {
+  background: color-mix(in oklab, var(--accent) 7%, var(--card));
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+}
+
+/* One grid: the drop zone and status span it, the four fields share it, and the checkbox takes
+   every column but the last, which holds the button. On one column that span collapses to the
+   first column and the button wraps below it. */
+form { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; }
+label { display: grid; align-content: start; gap: 0.25rem; font-size: 0.9rem; font-weight: 600; }
+label:has([type="checkbox"]) { display: block; grid-column: 1 / -2; align-self: center; font-weight: 400; }
+output { grid-column: 1 / -1; min-block-size: 1lh; font-size: 0.9rem; color: var(--quiet); }
+.good { color: var(--accent); }
+.bad { color: var(--bad); }
+
+.drop {
+  position: relative; grid-column: 1 / -1; place-content: center; text-align: center;
+  padding: 2rem 1rem; font-size: 1rem; border: 2px dashed var(--line); border-radius: 10px;
+  &:hover, &:has(:focus-visible), &.over {
+    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  &:has(:user-invalid) { border-color: var(--bad); }
+  /* The real input, stretched over the zone and transparent rather than hidden: clicks, keys
+     and drops all land on it, so the browser's own handling covers every one of them, and its
+     "select a file" bubble has something to point at. */
+  & input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+}
+
+/* 1rem, not the label's 0.9: below 16px iOS zooms the page on focus. min-inline-size: 0 lets a
+   field shrink to its column instead of overflowing it at its ~20ch default. A checkbox ignores
+   all of this, so it needs no :not(). */
+input {
+  min-inline-size: 0; font: inherit; font-size: 1rem; font-weight: 400; color: inherit;
+  padding: 0.45rem 0.6rem; background: var(--page); border: 1px solid var(--line); border-radius: 7px;
+  &:user-invalid { border-color: var(--bad); }
+}
+button, .button {
+  display: inline-block; justify-self: end; padding: 0.6rem 1.1rem; cursor: pointer;
+  font: inherit; font-weight: 600; text-decoration: none;
+  color: var(--card); background: var(--accent); border: 0; border-radius: 8px;
+  &:disabled { opacity: 0.45; cursor: progress; }
+}
+
+figure {
+  display: inline-grid; justify-items: center; gap: 0.35rem; margin: 0 1rem 1.25rem 0;
+  font-size: 0.8rem; color: var(--quiet);
+}
+/* Three across down to 320px: 22vw is what fits a phone's card, 7rem is the desktop size. */
+figure img {
+  box-sizing: border-box; inline-size: clamp(4rem, 22vw, 7rem); aspect-ratio: 1; padding: min(14px, 3vw);
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+}
+#p-dark { background: #111; }
+/* What Android does to a maskable icon: a circle, nothing else visible. */
+#p-mask { padding: 0; background: none; border-color: transparent; border-radius: 50%; }
+
+/* A bare <div> around a table is there to scroll it: the stage table's words cannot fit 320px. */
+div:has(> table) { overflow-x: auto; }
+table { inline-size: 100%; margin-block: 1rem; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 0.4rem 0.6rem; vertical-align: top; border-block-end: 1px solid var(--line); }
+th { text-align: start; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--quiet); }
+
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0; }
+dd { margin: 0; color: var(--quiet); }
+@media (width < 34rem) {
+  dl { grid-template-columns: 1fr; }
+  dd { margin-block-end: 0.5rem; }
+}
+
+pre {
+  overflow-x: auto; margin: 0; padding: 0.9rem 1rem; font-size: 0.85rem; line-height: 1.5;
+  background: var(--page); border: 1px solid var(--line); border-radius: 8px;
+}

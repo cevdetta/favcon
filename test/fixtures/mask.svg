@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <mask id="bite">
+    <rect width="64" height="64" fill="#fff"/>
+    <circle cx="47" cy="17" r="11" fill="#000"/>
+  </mask>
+  <style>.plate{fill:#30455E}.wedge{fill:#C9A227}</style>
+  <rect id="orphan" class="plate" x="6" y="6" width="52" height="52" rx="14" mask="url(#bite)"/>
+  <path class="wedge" d="M20 47 32 24 44 47 z"/>
+</svg>

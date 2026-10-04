@@ -1,0 +1,44 @@
+{
+  "name": "favcon",
+  "version": "0.1.0",
+  "description": "One SVG in, an optimised favicon set out.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Cevdet",
+  "bin": { "favcon": "bin/favcon.mjs" },
+  "exports": {
+    ".": "./bin/favcon.mjs",
+    "./core": "./lib/core.mjs",
+    "./astro": { "types": "./astro/index.d.ts", "default": "./astro/index.mjs" },
+    "./astro/middleware": "./astro/middleware.mjs",
+    "./astro/Head.astro": "./astro/Head.astro",
+    "./package.json": "./package.json"
+  },
+  "engines": { "node": ">=22.12" },
+  "packageManager": "pnpm@12.3.4",
+  "files": ["bin", "lib", "astro", "README.md", "LICENSE", "CHANGELOG.md"],
+  "scripts": {
+    "test": "node --test test/run.mjs",
+    "bench": "node bench/bench.mjs"
+  },
+  "dependencies": {
+    "svgo": "^4.1.0"
+  },
+  "optionalDependencies": {
+    "pngquant-bin": "^9.0.0"
+  },
+  "peerDependencies": {
+    "astro": "^7.3.5"
+  },
+  "peerDependenciesMeta": {
+    "astro": { "optional": true }
+  },
+  "keywords": [
+    "favicon", "favicons", "icon", "svg", "astro-integration", "astro", "pwa",
+    "apple-touch-icon", "webmanifest", "ico", "png", "optimisation", "cli"
+  ],
+  "repository": { "type": "git", "url": "git+https://github.com/cevdetta/favcon.git" },
+  "bugs": { "url": "https://github.com/cevdetta/favcon/issues" },
+  "homepage": "https://favcon.cevdet.ch",
+  "publishConfig": { "access": "public" }
+}

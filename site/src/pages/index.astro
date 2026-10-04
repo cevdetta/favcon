@@ -1,0 +1,253 @@
+---
+// Static page, client-side pipeline. The only reason this is Astro rather than a lone HTML file
+// is that the pipeline imports lib/core.mjs and three WASM packages, and something has to
+// resolve and bundle them.
+import '../styles/app.css';
+
+const title = 'favcon: one SVG in, an optimised favicon set out';
+const description = 'Turn one SVG into favicon.ico, icon.svg, an apple-touch-icon and maskable PWA icons, quantised and recompressed. Runs in your browser; nothing is uploaded.';
+const url = new URL('/', Astro.site).href;
+// JSON inside <script> ends at the first "</script", so every "<" is escaped.
+const jsonLd = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'favcon',
+  url,
+  description,
+  inLanguage: 'en',
+  publisher: { '@type': 'Person', name: 'Cevdet', url: 'https://github.com/cevdetta' },
+}).replaceAll('<', '\\u003c');
+
+const outputs = [
+  ['logo.svg', 'The mark itself. Optimised, animation intact. For pages and READMEs.'],
+  ['icon.svg', 'The same optimisation plus a structural animation strip. The browser favicon, and what every raster below is rendered from.'],
+  ['favicon.ico', 'One 32x32 entry, a raw PNG in a 22-byte container.'],
+  ['apple-touch-icon.png', '180x180 on the chosen ground, the mark placed in the safe zone.'],
+  ['icon-192.png, icon-512.png', 'On the same ground, placed the same way. The manifest\'s "any maskable" icons.'],
+  ['site.webmanifest', 'Icons only. Merge your own name and theme_color.'],
+];
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title}</title>
+<meta name="color-scheme" content="light dark" />
+<!-- The site's own set, built by favcon: the same block `favcon --html --manifest` prints. -->
+<link rel="icon" href="/favicon.ico" sizes="32x32" />
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest" />
+<link rel="canonical" href={url} />
+<meta name="description" content={description} />
+<meta property="og:site_name" content="favcon" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content={url} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={new URL('/og.png', Astro.site).href} />
+<script type="application/ld+json" set:html={jsonLd} />
+</head>
+<body>
+<header>
+  <h1><img src="/logo.svg" alt="" width="40" height="40" />favcon</h1>
+  <p>One SVG in, an optimised favicon set out.</p>
+  <p><small>
+    Everything below runs in this tab. There is no upload endpoint, because there is no server
+    to receive one: the page is static files.
+  </small></p>
+</header>
+
+<main>
+  <form>
+    <label class="drop">
+      <input type="file" name="file" accept=".svg,image/svg+xml" required />
+      <strong>Choose an SVG</strong>
+      <small>or drop one here</small>
+    </label>
+    <label>Palette
+      <input type="number" name="colors" value="256" min="2" max="256" required />
+      <small>2–256. A ceiling: a flat mark uses only the colours it has.</small>
+    </label>
+    <label>Sizes
+      <input type="text" name="sizes" value="192 512" pattern="\s*\d+([\s,]+\d+)*\s*" required />
+      <small>The padded “any maskable” icons.</small>
+    </label>
+    <label>Ground
+      <input type="text" name="bg" value="#000000" required />
+      <small>Under the padded icons. <code>none</code> keeps alpha and declares them <code>any</code> only.</small>
+    </label>
+    <label>Padding
+      <input type="text" name="padding" value="auto" pattern="\s*(auto|\d+(\.\d+)?)\s*" required />
+      <small>Percent per side, or <code>auto</code> to measure the mark.</small>
+    </label>
+    <label><input type="checkbox" name="animation" checked /> Keep the animation in <code>logo.svg</code></label>
+    <button>Generate</button>
+    <output aria-live="polite"></output>
+  </form>
+
+  <section id="result" hidden>
+    <h2>Your set</h2>
+    <figure><img id="p-light" alt="the mark on white" /><figcaption>on white</figcaption></figure>
+    <figure><img id="p-dark" alt="the mark on dark" /><figcaption>on dark</figcaption></figure>
+    <figure><img id="p-mask" alt="a padded icon under a circular mask" /><figcaption>masked</figcaption></figure>
+    <table>
+      <thead><tr><th>file</th><th>bytes</th><th></th></tr></thead>
+      <tbody id="files"></tbody>
+    </table>
+    <p><small id="fit"></small></p>
+    <a id="zip" class="button" download="favcon.zip">Download .zip</a>
+    <h3>Add to your <code>&lt;head&gt;</code></h3>
+    <pre id="links"></pre>
+  </section>
+
+  <section>
+    <h2>What you get</h2>
+    <dl>
+      {outputs.map(([name, what]) => (<><dt><code>{name}</code></dt><dd>{what}</dd></>))}
+    </dl>
+  </section>
+
+  <aside>
+    <h2>These bytes are not the CLI's bytes</h2>
+    <p>
+      <strong>The SVGs are exact.</strong> This page runs the same svgo plugin list as the
+      command line tool, imported from the same file, so <code>logo.svg</code>, <code>icon.svg</code> and
+      the <code>site.webmanifest</code> come out byte-identical. The mark is placed in the masked
+      icons by the same fit-and-snap search, so it lands on the same pixel. The 22-byte
+      container of <code>favicon.ico</code> is the same code too, but its payload is a PNG, so
+      the file differs by whatever the PNG differs by.
+    </p>
+    <p>
+      <strong>The PNGs differ</strong>, because the three programs the CLI shells out to have no
+      browser equivalents, only substitutes:
+    </p>
+    <div>
+      <table>
+        <thead><tr><th>stage</th><th>command line</th><th>this page</th></tr></thead>
+        <tbody>
+          <tr><td>render</td><td>resvg 0.48.1</td><td><code>@resvg/<wbr />resvg-wasm</code> 2.6.2</td></tr>
+          <tr><td>quantise</td><td>pngquant (libimagequant)</td><td><code>image-q</code>, a different algorithm</td></tr>
+          <tr><td>recompress</td><td>oxipng <code>-o max --zopfli --zi 120</code></td><td><code>@jsquash/<wbr />oxipng</code> level 6 (<strong>no zopfli</strong>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Measured over four fixtures at the defaults, PNG bytes only:</p>
+    <div>
+      <table>
+        <thead><tr><th>mark</th><th>CLI</th><th>here</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>flat, pixel grid</td><td>600&nbsp;B</td><td>620&nbsp;B</td><td>+3.3%</td></tr>
+          <tr><td>dense geometry</td><td>5370&nbsp;B</td><td>5043&nbsp;B</td><td>−6.1%</td></tr>
+          <tr><td>two-colour mark</td><td>4973&nbsp;B</td><td>5079&nbsp;B</td><td>+2.1%</td></tr>
+          <tr><td>radial gradient</td><td>27380&nbsp;B</td><td>29642&nbsp;B</td><td>+8.3%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Within a few percent either way: the missing zopfli costs bytes, and a different
+      quantiser can win them back, as it does on the dense mark. Close is not the same, though,
+      and it is why this page will not tell you what your icons will weigh.
+    </p>
+    <p>
+      Treat this as a preview you can see and click. For bytes you can measure, reproduce and
+      diff into git, run <code>npx favcon logo.svg</code>.
+    </p>
+  </aside>
+</main>
+
+<footer>
+  MIT. <a href="https://github.com/cevdetta/favcon">Source</a> ·
+  favcon also ships a CLI and an Astro integration.
+</footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const form = document.querySelector('form');
+  const { file } = form.elements;
+  const drop = file.labels[0], go = form.querySelector('button'), status = form.querySelector('output');
+  const TYPES = { svg: 'image/svg+xml', png: 'image/png', ico: 'image/x-icon', webmanifest: 'application/manifest+json' };
+  let urls = [];
+
+  const say = (msg, kind = '') => { status.textContent = msg; status.className = kind; };
+
+  // The pipeline is 185 KB of gzipped JS (svgo, image-q, the jsquash glue) plus a 2.4 MB resvg
+  // WASM, and no visitor needs either before choosing a file. Both start loading the moment one
+  // is chosen, overlapping the time spent on the options. A failed import is forgotten, so the
+  // next attempt retries rather than replaying the same rejection.
+  let pipeline;
+  const load = () => (pipeline ??= import('../lib/pipeline.mjs').then(
+    (m) => { m.warm(); return m; },
+    (e) => { pipeline = null; throw e; },
+  ));
+
+  // The input covers the drop zone, so the browser does the picking and the dropping; all that
+  // is left here is the highlight while something is dragged over it.
+  for (const [type, on] of [['dragenter', true], ['dragleave', false], ['drop', false]]) {
+    file.addEventListener(type, () => drop.classList.toggle('over', on));
+  }
+  file.addEventListener('change', () => {
+    const f = file.files[0];
+    // `accept` filters the picker but not a drop, so a dropped PNG still arrives here.
+    const ok = f && (/\.svg$/i.test(f.name) || f.type === 'image/svg+xml');
+    if (f && !ok) file.value = '';
+    drop.querySelector('strong').textContent = ok ? f.name : 'Choose an SVG';
+    if (!ok) return say(f ? 'That is not an SVG.' : '', f ? 'bad' : '');
+    say('Ready.');
+    load().catch(() => {});   // reported by the submit that awaits it
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    go.disabled = true;
+    say('Building…');
+    for (const u of urls) URL.revokeObjectURL(u);
+    urls = [];
+    const url = (bytes, type) => {
+      const u = URL.createObjectURL(new Blob([bytes], { type }));
+      urls.push(u);
+      return u;
+    };
+    try {
+      const { buildInBrowser } = await load();
+      const t0 = performance.now();
+      const built = await buildInBrowser(await data.get('file').text(), {
+        colors: data.get('colors'),
+        sizes: data.get('sizes').trim().split(/[\s,]+/).map(Number),
+        bg: data.get('bg').trim(),
+        padding: data.get('padding').trim(),
+        animation: data.has('animation'),
+      });
+      const ms = Math.round(performance.now() - t0);
+
+      // Every name comes from the pipeline's fixed list, never from the visitor's file.
+      $('files').innerHTML = built.files.map((f) =>
+        `<tr><td><code>${f.name}</code></td><td>${f.bytes.length}\u00a0B</td>` +
+        `<td><a download="${f.name}" href="${url(f.bytes, TYPES[f.name.split('.').pop()])}">save</a></td></tr>`).join('');
+
+      const byName = Object.fromEntries(built.files.map((f) => [f.name, f.bytes]));
+      $('p-light').src = $('p-dark').src = url(byName['icon.svg'], TYPES.svg);
+      const biggest = Math.max(...Object.keys(built.fit.icons).map(Number));
+      const show = built.fit.icons[biggest];
+      // The masked preview shows the largest padded icon: that is what a launcher masks.
+      $('p-mask').src = show ? url(byName[`icon-${biggest}.png`], TYPES.png) : $('p-light').src;
+      $('fit').textContent = show
+        ? `Mark placed at ${show.box}px of ${show.canvas} in the safe zone` +
+          `${show.snapped ? ', snapped to whole pixels' : ''}` +
+          `${show.fullBleed ? ' (full-bleed source, used as drawn)' : ''}.`
+        : 'No padded icon: the ground is transparent.';
+      $('links').textContent = built.links.trim();
+      $('zip').href = url(built.archive(), 'application/zip');
+      $('result').hidden = false;
+      say(`Done in ${ms} ms. ${built.animated ? 'logo.svg keeps its animation.' : 'The source is static.'}`, 'good');
+    } catch (e) {
+      say(e?.message ?? String(e), 'bad');
+    } finally {
+      go.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

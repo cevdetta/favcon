@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
+     role="img" aria-label="Animated fixture">
+  <style>
+    .hub  { fill: var(--hub, #1B4D3E); }
+    .ring { fill: none; stroke: var(--ring, #6FCF97); stroke-width: 4; }
+    @media (prefers-reduced-motion: no-preference) {
+      .ring { transform-origin: 50% 50%; animation: spread 2.4s ease-out var(--loop, infinite); }
+      @keyframes spread {
+        0%   { transform: scale(.62); opacity: .2 }
+        60%  { transform: scale(1.07); opacity: 1 }
+        100% { transform: scale(1);    opacity: 1 }
+      }
+    }
+  </style>
+  <circle class="ring" cx="32" cy="32" r="21"/>
+  <circle class="hub" cx="32" cy="32" r="9"/>
+</svg>

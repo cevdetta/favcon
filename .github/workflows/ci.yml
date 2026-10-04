@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The tool shells out to three binaries whose versions change its output bytes, so the
+# versions are pinned here rather than resolved. An unpinned toolchain turns "did this commit
+# change the output?" into a question CI cannot answer.
+env:
+  RESVG_VERSION: '0.48.1'
+  OXIPNG_VERSION: '10.2.1'
+
+jobs:
+  linux:
+    # NEVER ubuntu-latest. An image flip changes the apt pngquant version, with no notice,
+    # and with it the output bytes; the failure would look like a favcon regression.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12 is the engines floor: the first release with stable import.meta.resolve.
+        node: ['22.12', '24', 'lts']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes, so skip the credential helper.
+          persist-credentials: false
+
+      # One step installs the pnpm pinned in "packageManager" as a native binary, plus the
+      # runtime, then runs the install. `require-lockfile` makes it --frozen-lockfile and
+      # fails on a missing lockfile rather than resolving one from the registry.
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@${{ matrix.node }}
+          require-lockfile: true
+
+      # icoutils is here for one reason: so the ICO-equivalence test runs instead of skipping.
+      # It is not a dependency of the tool; favcon writes the 22-byte container itself.
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y pngquant icoutils
+
+      # Pinned release tarballs, not `cargo install`: cargo takes 2-5 minutes per tool and
+      # builds whatever the current crate resolves to. These land in seconds and are the
+      # same binaries the measurements in docs/BENCHMARKS.md were taken with.
+      - name: resvg and oxipng
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/resvg.tar.gz \
+            "https://github.com/linebender/resvg/releases/download/v${RESVG_VERSION}/resvg-linux-x86_64.tar.gz"
+          sudo tar -xzf /tmp/resvg.tar.gz -C /usr/local/bin resvg
+          curl -fsSL -o /tmp/oxipng.tar.gz \
+            "https://github.com/oxipng/oxipng/releases/download/v${OXIPNG_VERSION}/oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          sudo tar -xzf /tmp/oxipng.tar.gz --strip-components=1 -C /usr/local/bin \
+            "oxipng-${OXIPNG_VERSION}-x86_64-unknown-linux-gnu/oxipng"
+          sudo chmod +x /usr/local/bin/resvg /usr/local/bin/oxipng
+
+      - name: Tool versions
+        run: node --version && resvg --version && oxipng --version && pngquant --version && icotool --version | head -1
+
+      - run: pnpm test
+
+  macos:
+    # Apple Silicon, with brew's resvg and oxipng. pngquant-bin's macOS binary is universal, so
+    # the resolver takes it before brew's pngquant. This job proves that tier on arm64.
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@lts
+          require-lockfile: true
+      - run: brew install resvg oxipng pngquant
+      - run: pnpm test
+
+  windows:
+    # A smoke job, not a full one. Upstream stopped shipping resvg-win64.zip after v0.47.0,
+    # so the only route to a Windows rasteriser is a cached `cargo install`, and that can wait.
+    # Everything that needs no rasteriser still runs here: argument parsing, the PATH
+    # resolver, both svgo passes, the ICO writer and the option validator. The suite skips
+    # the binary-dependent groups by itself when the tools are missing.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@lts
+          require-lockfile: true
+      - run: pnpm test
+
+  site:
+    # The website imports lib/core.mjs by path, so a change to the shared half can break it
+    # without touching site/. Build it and run the real pipeline in a headless browser.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@lts
+          require-lockfile: true
+      - run: pnpm --filter favcon-site build
+      # The runner image ships Google Chrome, not a `chromium` binary.
+      - run: node site/test/cdp-check.mjs
+        env:
+          CHROME: google-chrome
+
+  package:
+    # test/, docs/, bench/, site/ and .github/ must never reach the tarball, and lib/ must:
+    # bin/favcon.mjs imports lib/core.mjs, so a tarball without it fails on first run.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          runtime: node@lts
+          install: false
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: npm pack contains only what it should
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > pack.json
+          node -e "
+            const parsed = JSON.parse(require('node:fs').readFileSync('pack.json','utf8'));
+            const pkg = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+            const files = pkg.files.map(f => f.path);
+            const leaked = files.filter(f => /^(test|docs|bench|site|\.github)\//.test(f));
+            if (leaked.length) { console.error('these must not ship:', leaked); process.exit(1); }
+            for (const need of ['bin/favcon.mjs','lib/core.mjs','astro/index.mjs','astro/Head.astro','README.md','LICENSE','CHANGELOG.md']) {
+              if (!files.includes(need)) { console.error('missing from the tarball:', need); process.exit(1); }
+            }
+            console.log(files.length + ' files, all accounted for');
+          "
+
+  workflows:
+    # Static analysis of the workflows themselves: template injection, over-broad
+    # permissions, unpinned actions. zizmor's own version is pinned like every other tool.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: 1.30.1
+          advanced-security: false
