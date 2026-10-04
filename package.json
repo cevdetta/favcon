@@ -18,7 +18,7 @@
   "packageManager": "pnpm@12.3.4",
   "files": ["bin", "lib", "astro", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
-    "test": "node --test test/run.mjs test/engine.mjs",
+    "test": "node --test test/run.mjs test/engine.mjs test/pipeline.mjs",
     "bench": "node bench/bench.mjs"
   },
   "dependencies": {
