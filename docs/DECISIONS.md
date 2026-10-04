@@ -415,3 +415,24 @@ to ~30 s (zopfli has more distinct colours to model).
 The accuracy tests now score the **default** build instead of a hand-picked `--colors 16`, so
 "inside the bar" is a claim about what ships. `--colors 8` remains one flag away for anyone
 who wants the old trade, and a test pins that it still misses the bar on `flat.svg`.
+
+### 25. `icon.svg` keeps a `prefers-color-scheme` block
+
+A dark-mode rule is the usual reason to ship an SVG favicon: a dark mark disappears on a dark
+tab strip, and browsers apply `@media (prefers-color-scheme: dark)` inside an SVG favicon.
+favcon dropped the block from both SVGs without a warning. `inlineStyles` consumed the class
+it selects, and csso then removed the `@media` rule as unused, the same path decision 18 closed
+for motion classes. For a static source the logo pass never runs, so its guard never applied.
+
+The icon pass now treats a source with a `prefers-color-scheme` block the way the logo pass
+treats any stylesheet: `inlineStyles` is switched off when it would consume a class the block
+selects, and `pruneRefs` replaces the blanket `class` removal, keeping the classes a selector
+names and no others. That relaxes item 3 of the definition of done for this one case: one
+`<style>`, holding the source's rules, and the classes they select. Sources without such a block
+take the same path as before, byte for byte.
+
+The rasters do not change. resvg skips `@media` ("The @media rule is not supported. Skipped."),
+so every PNG renders the light rules: a test builds `dark.svg` and the same mark with the block
+deleted, and asserts the ICO, apple icon and padded icon are byte-identical. There is no dark
+PNG set: no platform asks a favicon PNG for a colour scheme.
+
