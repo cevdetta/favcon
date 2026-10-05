@@ -110,6 +110,11 @@ minor at minimum, never patch.** Downstream users diff these files into git.
 
 ### Fixed
 
+- **The Astro integration no longer adds a second set of icon links** to a page that already
+  links one with a `rel` such as `alternate icon`. It checked for a `rel` that starts with
+  `icon`; favcon now looks for the `icon` keyword in any `<link>`'s `rel`, in the Astro
+  middleware and in `favcon/vite` alike.
+
 - **`<desc>` no longer reaches `icon.svg` or `logo.svg`.** svgo's `removeDesc` keeps any
   description that is not empty or an editor stamp, unless told otherwise; `general.svg`'s
   87-byte description was 30 % of its 289-byte `icon.svg`. The rasters are byte-identical.

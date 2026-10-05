@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 
 import { buildFiles, CONFIG_FILES, engineVersions, FavconError, linkTags, loadConfigFile } from '../bin/favcon.mjs';
 import { normaliseOptions, resolveOptions } from '../lib/config.mjs';
-import { manifestIcons } from '../lib/core.mjs';
+import { declaresIcon, manifestIcons } from '../lib/core.mjs';
 import { cacheKey, favconVersion, readSlot, writeSlot } from './cache.mjs';
 
 /**
@@ -194,8 +194,7 @@ export default function favcon(options = {}) {
     transformIndexHtml: {
       order: 'post',
       async handler(html, ctx) {
-        // An author who declared an icon has said what they want.
-        if (/rel=["']?(shortcut )?icon/i.test(html) || !html.includes('</head>')) return html;
+        if (declaresIcon(html) || !html.includes('</head>')) return html;
         const { links } = await settingsFor(ctx.server ? 'dev' : 'build');
         return html.replace('</head>', `${links}</head>`);
       },

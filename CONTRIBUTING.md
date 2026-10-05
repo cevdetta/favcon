@@ -94,8 +94,9 @@ resvg, pngquant and oxipng for its native reference arm.
     load names `favcon.config.mjs`.
 20. `base` prefixes every `href` from `--html` and every icon `src` in the manifest.
 21. `favcon/vite` emits the same bytes as the CLI, once, at the output root of a client build
-    and nowhere in an SSR build; links them in `index.html` unless the page declares an icon;
-    serves them in dev at `base`; and never shadows a different file in `public/`.
+    and nowhere in an SSR build; links them in `index.html` unless the page already has a
+    `<link rel="icon">`; serves them in dev at `base`; and never replaces a different file in
+    `public/`.
 
 ---
 
