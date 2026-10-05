@@ -9,7 +9,9 @@ import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { build, buildFiles } from '../bin/favcon.mjs';
+import { manifestIcons, manifestJson } from '../lib/core.mjs';
 import { cacheKey, favconVersion, readSlot, writeSlot } from '../vite/cache.mjs';
+import { favconIcons } from '../vite/index.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixture = (n) => join(ROOT, 'test', 'fixtures', n);
@@ -51,5 +53,23 @@ describe('the cache', () => {
 
   it('knows its own version', () => {
     assert.match(favconVersion(), /^\d+\.\d+\.\d+/);
+  });
+});
+
+describe('manifest icons', () => {
+  it('manifestJson keeps its bytes and its entries match manifestIcons', () => {
+    const text = manifestJson({ sizes: [192, 512], base: '/b/', purpose: 'any maskable', extra: { name: 'x' } });
+    assert.equal(text, '{\n  "name": "x",\n  "icons": [\n' +
+      '    { "src": "/b/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },\n' +
+      '    { "src": "/b/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }\n  ]\n}\n');
+    assert.deepEqual(JSON.parse(text).icons, manifestIcons({ sizes: [192, 512], base: '/b/', purpose: 'any maskable' }));
+  });
+
+  it('favconIcons gives vite-plugin-pwa the entries favcon writes', () => {
+    assert.deepEqual(favconIcons(), [
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+    ]);
+    assert.deepEqual(favconIcons({ sizes: [64], bg: null, base: 'app' }), [{ src: '/app/icon-64.png', sizes: '64x64', type: 'image/png' }]);
   });
 });
