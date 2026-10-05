@@ -14,6 +14,10 @@
       "default": "./bin/favcon.mjs"
     },
     "./core": "./lib/core.mjs",
+    "./vite": {
+      "types": "./vite/index.d.mts",
+      "default": "./vite/index.mjs"
+    },
     "./astro": {
       "types": "./astro/index.d.ts",
       "default": "./astro/index.mjs"
@@ -30,6 +34,7 @@
     "bin",
     "lib",
     "astro",
+    "vite",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -44,10 +49,14 @@
     "svgo": "^4.1.0"
   },
   "peerDependencies": {
-    "astro": "^7.3.5"
+    "astro": "^7.3.5",
+    "vite": "^8.0.0"
   },
   "peerDependenciesMeta": {
     "astro": {
+      "optional": true
+    },
+    "vite": {
       "optional": true
     }
   },
@@ -64,7 +73,8 @@
     "ico",
     "png",
     "optimisation",
-    "cli"
+    "cli",
+    "vite-plugin"
   ],
   "repository": {
     "type": "git",

@@ -1,6 +1,7 @@
 // favcon/vite: the in-memory build and the cache first, then the plugin in a real Vite build
 // and a real dev server, then its types.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -267,5 +268,29 @@ describe('favcon/vite in dev', () => {
       assert.equal((await fetch(url('/'))).status, 200);
       assert.ok(warnings.some((w) => /favcon: not an SVG/.test(w)), warnings.join('\n'));
     } finally { await server.close(); }
+  });
+});
+
+describe('favcon/vite types', () => {
+  it('declares the plugin through the package exports', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    assert.deepEqual(pkg.exports['./vite'], { types: './vite/index.d.mts', default: './vite/index.mjs' });
+    assert.ok(pkg.files.includes('vite'));
+    assert.equal(pkg.peerDependencies.vite, '^8.0.0');
+    assert.equal(pkg.peerDependenciesMeta.vite.optional, true);
+  });
+
+  const tsc = join(ROOT, 'site', 'node_modules', 'typescript', 'bin', 'tsc');
+  it('type-checks a vite.config, and catches out and a misspelt key', { skip: existsSync(tsc) ? false : 'typescript not installed' }, () => {
+    const d = dir();
+    const spec = JSON.stringify(join(ROOT, 'vite', 'index.mjs').replace(/\\/g, '/'));
+    writeFileSync(join(d, 'good.mts'), `import favcon, { favconIcons } from ${spec};\nconst p = favcon({ input: 'src/logo.svg', sizes: [192, 512], mode: 'fast', base: '/x/' });\nconst icons: { src: string; sizes: string; type: string; purpose?: string }[] = favconIcons({ sizes: [192] });\nexport { p, icons };\n`);
+    writeFileSync(join(d, 'bad.mts'), `import favcon from ${spec};\nexport const p = favcon({ out: 'dist', colours: 8 });\n`);
+    const check = (f) => spawnSync(process.execPath, [tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--skipLibCheck', join(d, f)], { encoding: 'utf8' });
+    const good = check('good.mts');
+    assert.equal(good.status, 0, good.stdout + good.stderr);
+    const bad = check('bad.mts');
+    assert.notEqual(bad.status, 0);
+    assert.match(bad.stdout, /out|colours/);
   });
 });
