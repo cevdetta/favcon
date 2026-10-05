@@ -848,7 +848,7 @@ describe('rendering', () => {
 // ---------------------------------------------------------------------- 18 --
 
 describe('the published tarball', () => {
-  it('contains bin/, lib/, astro/ and the docs, and nothing from test, docs, bench, site or .github', () => {
+  it('contains bin/, lib/, astro/, vite/ and the docs, and nothing from test, docs, bench, site or .github', () => {
     // On Windows `npm` is npm.cmd, which Node refuses to spawn without a shell since the
     // CVE-2024-27980 fix, so the Windows job would fail here with ENOENT. The arguments are
     // constants, so the shell has nothing to misquote.
@@ -863,7 +863,7 @@ describe('the published tarball', () => {
     // ERR_MODULE_NOT_FOUND on first run. This assertion is the only thing standing between
     // the split and a broken publish.
     assert.ok(files.includes('lib/core.mjs'), 'lib/core.mjs is missing - the package cannot run');
-    for (const need of ['astro/index.mjs', 'astro/Head.astro', 'package.json', 'README.md', 'LICENSE', 'CHANGELOG.md']) {
+    for (const need of ['astro/index.mjs', 'astro/Head.astro', 'vite/index.mjs', 'vite/cache.mjs', 'vite/index.d.mts', 'package.json', 'README.md', 'LICENSE', 'CHANGELOG.md']) {
       assert.ok(files.includes(need), `${need} is missing from the tarball`);
     }
     for (const f of files) {

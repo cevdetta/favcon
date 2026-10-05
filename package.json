@@ -5,20 +5,42 @@
   "type": "module",
   "license": "MIT",
   "author": "Cevdet",
-  "bin": { "favcon": "bin/favcon.mjs" },
+  "bin": {
+    "favcon": "bin/favcon.mjs"
+  },
   "exports": {
-    ".": { "types": "./bin/favcon.d.mts", "default": "./bin/favcon.mjs" },
+    ".": {
+      "types": "./bin/favcon.d.mts",
+      "default": "./bin/favcon.mjs"
+    },
     "./core": "./lib/core.mjs",
-    "./astro": { "types": "./astro/index.d.ts", "default": "./astro/index.mjs" },
+    "./vite": {
+      "types": "./vite/index.d.mts",
+      "default": "./vite/index.mjs"
+    },
+    "./astro": {
+      "types": "./astro/index.d.ts",
+      "default": "./astro/index.mjs"
+    },
     "./astro/middleware": "./astro/middleware.mjs",
     "./astro/Head.astro": "./astro/Head.astro",
     "./package.json": "./package.json"
   },
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "packageManager": "pnpm@12.3.4",
-  "files": ["bin", "lib", "astro", "README.md", "LICENSE", "CHANGELOG.md"],
+  "files": [
+    "bin",
+    "lib",
+    "astro",
+    "vite",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "test": "node --test test/run.mjs test/engine.mjs test/pipeline.mjs test/config.mjs",
+    "test": "node --test test/run.mjs test/engine.mjs test/pipeline.mjs test/config.mjs test/vite.mjs",
     "bench": "node bench/bench.mjs"
   },
   "dependencies": {
@@ -27,17 +49,45 @@
     "svgo": "^4.1.0"
   },
   "peerDependencies": {
-    "astro": "^7.3.5"
+    "astro": "^7.3.5",
+    "vite": "^8.0.0"
   },
   "peerDependenciesMeta": {
-    "astro": { "optional": true }
+    "astro": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
   },
   "keywords": [
-    "favicon", "favicons", "icon", "svg", "astro-integration", "astro", "pwa",
-    "apple-touch-icon", "webmanifest", "ico", "png", "optimisation", "cli"
+    "favicon",
+    "favicons",
+    "icon",
+    "svg",
+    "astro-integration",
+    "astro",
+    "pwa",
+    "apple-touch-icon",
+    "webmanifest",
+    "ico",
+    "png",
+    "optimisation",
+    "cli",
+    "vite-plugin"
   ],
-  "repository": { "type": "git", "url": "git+https://github.com/cevdetta/favcon.git" },
-  "bugs": { "url": "https://github.com/cevdetta/favcon/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cevdetta/favcon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cevdetta/favcon/issues"
+  },
   "homepage": "https://favcon.cevdet.ch",
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "vite": "8.3.1"
+  }
 }
