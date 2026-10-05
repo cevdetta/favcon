@@ -251,6 +251,44 @@ motion one survives.
 `--no-animation` builds `logo.svg` static too. A source with no animation gets `logo.svg` as a
 byte copy of `icon.svg`.
 
+## Vite
+
+```js
+// vite.config.js
+import { defineConfig } from 'vite'
+import favcon from 'favcon/vite'
+
+export default defineConfig({ plugins: [favcon({ input: 'src/logo.svg' })] })
+```
+
+In dev the set is built on the first request for an icon, in fast mode, and served from
+memory; editing the mark or `favcon.config.*` rebuilds it and reloads the page. `vite build`
+emits the release set at the output root. Nothing is written to `public/`. The `<link>` tags
+go into `index.html` unless the page already declares an icon; for a framework without an
+`index.html`, `import { links, files } from 'virtual:favcon'` in your layout.
+
+The options are the config keys minus `out`; they win over `favcon.config.*` in the Vite root.
+`base` follows Vite's `base` when that is a path.
+
+favcon will not shadow a different file of the same name in `public/`: the build fails, and dev
+serves yours with a warning.
+
+**vite-plugin-pwa.** It writes and links its own manifest, so favcon writes none beside it.
+Give it favcon's icons:
+
+```js
+import { VitePWA } from 'vite-plugin-pwa'
+import favcon, { favconIcons } from 'favcon/vite'
+
+export default defineConfig({
+  plugins: [favcon(), VitePWA({ manifest: { name: 'Example', icons: favconIcons() } })],
+})
+```
+
+`favconIcons()` takes the same `sizes`, `bg` and `base` as the plugin. Leave vite-plugin-pwa's
+`pwaAssets` off: it writes a `favicon.ico` and touch icons of its own, and favcon warns when
+both are on.
+
 ## Astro
 
 ```js

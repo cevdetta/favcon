@@ -86,13 +86,16 @@ resvg, pngquant and oxipng for its native reference arm.
     the ICO payload. Under `--bg none` the icon is unpadded too, and the two are the same
     bytes again.
 17. A non-square viewBox warns on stderr.
-18. `npm pack` contains only `bin/`, `lib/`, `astro/`, `README.md`, `LICENSE`, `CHANGELOG.md`,
-    and `lib/core.mjs` by name, since the package cannot run without it.
+18. `npm pack` contains only `bin/`, `lib/`, `astro/`, `vite/`, `README.md`, `LICENSE`,
+    `CHANGELOG.md`, and `lib/core.mjs` by name, since the package cannot run without it.
 19. A `favcon.config.js`, `.mjs` or `.ts` in the working directory supplies any option; flags win,
     and `--var` merges by name. An unknown key, a default export that is not an object, or a
     config that fails to load is a `favcon: …` message with no stack trace; a `.ts` Node cannot
     load names `favcon.config.mjs`.
 20. `base` prefixes every `href` from `--html` and every icon `src` in the manifest.
+21. `favcon/vite` emits the same bytes as the CLI, once, at the output root of a client build
+    and nowhere in an SSR build; links them in `index.html` unless the page declares an icon;
+    serves them in dev at `base`; and never shadows a different file in `public/`.
 
 ---
 

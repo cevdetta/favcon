@@ -58,6 +58,11 @@ minor at minimum, never patch.** Downstream users diff these files into git.
   option, plus `input`, `base` and `mode`, which have no flag. Flags win; `--var` merges by
   name. `defineConfig` is exported from `favcon` with types. `base` reaches the `--html` links
   and the manifest's icon URLs, and the summary names the mode.
+- **`favcon/vite`**, a Vite 8 plugin. Dev serves the set from memory in fast mode and rebuilds
+  on change; a build emits the release set at the output root and links it in `index.html`;
+  `virtual:favcon` exports the links and the files. It never shadows a different file in
+  `public/`, shares the Astro integration's content-addressed cache, and leaves the manifest
+  to vite-plugin-pwa when that is present, with `favconIcons()` for its `manifest.icons`.
 - `test/run.mjs`: the definition of done as `node:test`, with a PNG reader and an accuracy
   gate written over `node:zlib`. No bash, no ImageMagick.
 - `bench/bench.mjs`: sweeps palette size, dither, stage order, zopfli iterations and the ICO
