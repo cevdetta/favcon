@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer, build as viteBuild } from 'vite';
 
 import { build, buildFiles } from '../bin/favcon.mjs';
-import { manifestIcons, manifestJson } from '../lib/core.mjs';
+import { declaresIcon, manifestIcons, manifestJson } from '../lib/core.mjs';
 import { cacheKey, favconVersion, readSlot, writeSlot } from '../vite/cache.mjs';
 import favcon, { favconIcons } from '../vite/index.mjs';
 
@@ -55,6 +55,22 @@ describe('the cache', () => {
 
   it('knows its own version', () => {
     assert.match(favconVersion(), /^\d+\.\d+\.\d+/);
+  });
+});
+
+describe('declaresIcon', () => {
+  it('finds a link whose rel holds the icon keyword', () => {
+    for (const html of ['<link rel="icon" href="/a.svg">', "<link href='/a.ico' rel='icon'>", '<link rel=icon href=/a.ico>',
+      '<LINK REL="Icon" HREF="/a.ico">', '<link rel="alternate icon" href="/a.ico">']) {
+      assert.equal(declaresIcon(`<head>${html}</head>`), true, html);
+    }
+  });
+
+  it('ignores links and text that only look like one', () => {
+    for (const html of ['<link rel="apple-touch-icon" href="/a.png">', '<link rel="iconic" href="/a">',
+      '<meta name="x" content=\'rel="icon"\'>', '<p>rel="icon"</p>', '<link rel="stylesheet" href="/icon.css">']) {
+      assert.equal(declaresIcon(`<head>${html}</head>`), false, html);
+    }
   });
 });
 
@@ -135,7 +151,7 @@ describe('favcon/vite in a build', () => {
 
   it('leaves a page that already declares an icon alone', async () => {
     const root = app();
-    writeFileSync(join(root, 'index.html'), '<!doctype html><html><head><link rel="shortcut icon" href="/x.ico"></head><body></body></html>');
+    writeFileSync(join(root, 'index.html'), '<!doctype html><html><head><link rel="icon" href="/x.svg"></head><body></body></html>');
     await vbuild(root, [favcon(FAST)]);
     assert.ok(!/favicon\.ico/.test(readFileSync(join(root, 'dist', 'index.html'), 'utf8')));
   });

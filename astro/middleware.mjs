@@ -15,6 +15,8 @@
 
 import { links } from 'virtual:favcon';
 
+import { declaresIcon } from '../lib/core.mjs';
+
 export const onRequest = async (context, next) => {
   const response = await next();
 
@@ -22,7 +24,7 @@ export const onRequest = async (context, next) => {
   if (!type.includes('text/html')) return response;
 
   const html = await response.text();
-  if (/rel=["']?icon/i.test(html) || !html.includes('</head>')) {
+  if (declaresIcon(html) || !html.includes('</head>')) {
     return new Response(html, response);
   }
 
