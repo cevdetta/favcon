@@ -114,6 +114,58 @@ export default function favcon(options = {}) {
       pwa = config.plugins.find((p) => p.name === PWA) ?? null;
     },
 
+    configureServer(server) {
+      const base = server.config.base;
+
+      // Registered here, not returned: as a post hook, public/ and a framework's router
+      // answer first.
+      server.middlewares.use(async (req, res, next) => {
+        const path = (req.url ?? '').split('?')[0];
+        if (!path.startsWith(base)) return next();
+        const name = path.slice(base.length);
+        let files;
+        try {
+          if (!(await settingsFor('dev')).names.includes(name)) return next();
+          files = await setFor('dev');
+        } catch (e) {
+          sets.dev = null;            // try again on the next request or change
+          warnOnce(message(e));
+          return next();
+        }
+        const f = files.find((x) => x.name === name);
+        if (!f) return next();
+        if (clash(f)) {
+          warnOnce(`favcon: public/${f.name} exists and is not the file favcon builds; serving yours`);
+          return next();
+        }
+        res.setHeader('Content-Type', TYPES[name.split('.').pop()]);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(Buffer.from(f.bytes));
+      });
+
+      // The mark and the config file can sit outside the module graph, and outside the root.
+      const watched = new Set();
+      const watch = async () => {
+        let s = null;
+        try { s = await settingsFor('dev'); } catch { /* a bad option: watch the config files */ }
+        const paths = [...CONFIG_FILES.map((f) => join(root, f)), ...(s ? [s.merged.input] : [])];
+        for (const p of paths) if (!watched.has(p)) { watched.add(p); server.watcher.add(p); }
+      };
+      watch();
+      const onChange = async (file) => {
+        if (!watched.has(resolve(file))) return;
+        settings.dev = null;
+        sets.dev = null;
+        warned.clear();
+        await watch();
+        const env = server.environments.client;
+        const mod = env.moduleGraph.getModuleById(RESOLVED);
+        if (mod) env.moduleGraph.invalidateModule(mod);
+        server.ws.send({ type: 'full-reload' });
+      };
+      for (const event of ['change', 'add', 'unlink']) server.watcher.on(event, onChange);
+    },
+
     async buildStart() {
       if (!emitsHere(this.environment)) return;
       try {

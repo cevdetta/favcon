@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { build as viteBuild } from 'vite';
+import { createServer, build as viteBuild } from 'vite';
 
 import { build, buildFiles } from '../bin/favcon.mjs';
 import { manifestIcons, manifestJson } from '../lib/core.mjs';
@@ -203,5 +203,69 @@ describe('favcon/vite in a build', () => {
     await vbuild(root, [favcon(FAST)]);
     assert.deepEqual(readFileSync(join(root, 'dist', 'favicon.ico')), first);
     assert.equal(readdirSync(cache).filter((f) => !f.startsWith('.')).length, 1);
+  });
+});
+
+const serve = async (root, plugins, extra = {}) => {
+  const server = await createServer({
+    root, configFile: false, logLevel: 'silent', plugins, server: { port: 0, strictPort: false, host: '127.0.0.1' },
+    customLogger: { info() {}, warn: (m) => warnings.push(m), warnOnce: (m) => warnings.push(m), error: (m) => warnings.push(m), clearScreen() {}, hasErrorLogged: () => false, hasWarned: false },
+    ...extra,
+  });
+  await server.listen();
+  const { port } = server.httpServer.address();
+  return { server, url: (p) => `http://127.0.0.1:${port}${p}` };
+};
+
+describe('favcon/vite in dev', () => {
+  it('serves the set from memory at base, with content types', async () => {
+    const root = app();
+    const { server, url } = await serve(root, [favcon({ sizes: [32], bg: '#000000' })], { base: '/sub/' });
+    try {
+      for (const [path, type] of [['favicon.ico', 'image/x-icon'], ['icon.svg', 'image/svg+xml'], ['icon-32.png', 'image/png']]) {
+        const r = await fetch(url(`/sub/${path}`));
+        assert.equal(r.status, 200, path);
+        assert.equal(r.headers.get('content-type'), type, path);
+      }
+      const html = await (await fetch(url('/sub/'))).text();
+      assert.match(html, /href="\/sub\/favicon\.ico"/);
+    } finally { await server.close(); }
+  });
+
+  it('serves the public/ file and warns when it differs', async () => {
+    warnings.length = 0;
+    const root = app({ 'public/favicon.ico': 'mine' });
+    const { server, url } = await serve(root, [favcon({ sizes: [32], bg: '#000000' })]);
+    try {
+      assert.equal(await (await fetch(url('/favicon.ico'))).text(), 'mine');
+      assert.ok(warnings.some((w) => /public\/favicon\.ico exists and is not the file favcon builds/.test(w)), warnings.join('\n'));
+    } finally { await server.close(); }
+  });
+
+  it('rebuilds when the mark changes', async () => {
+    const root = app();
+    const { server, url } = await serve(root, [favcon({ sizes: [32], bg: '#000000' })]);
+    try {
+      const before = await (await fetch(url('/icon.svg'))).text();
+      writeFileSync(join(root, 'src', 'logo.svg'), readFileSync(fixture('second.svg')));
+      let after = before;
+      for (let i = 0; i < 100 && after === before; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        after = await (await fetch(url('/icon.svg'))).text();
+      }
+      assert.notEqual(after, before, 'icon.svg did not change after the mark did');
+    } finally { await server.close(); }
+  });
+
+  it('logs a bad mark and keeps serving the page', async () => {
+    warnings.length = 0;
+    const root = app();
+    writeFileSync(join(root, 'src', 'logo.svg'), 'not an svg');
+    const { server, url } = await serve(root, [favcon({ sizes: [32], bg: '#000000' })]);
+    try {
+      assert.equal((await fetch(url('/favicon.ico'))).status, 404);
+      assert.equal((await fetch(url('/'))).status, 200);
+      assert.ok(warnings.some((w) => /favcon: not an SVG/.test(w)), warnings.join('\n'));
+    } finally { await server.close(); }
   });
 });
