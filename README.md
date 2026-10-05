@@ -258,36 +258,53 @@ byte copy of `icon.svg`.
 import { defineConfig } from 'vite'
 import favcon from 'favcon/vite'
 
-export default defineConfig({ plugins: [favcon({ input: 'src/logo.svg' })] })
+export default defineConfig({
+  plugins: [favcon({ input: 'src/logo.svg' })],
+})
 ```
 
-In dev the set is built on the first request for an icon, in fast mode, and served from
-memory; editing the mark or `favcon.config.*` rebuilds it and reloads the page. `vite build`
-emits the release set at the output root. Nothing is written to `public/`. The `<link>` tags
-go into `index.html` unless the page already declares an icon; for a framework without an
-`index.html`, `import { links, files } from 'virtual:favcon'` in your layout.
+**`vite dev`** builds the icons the first time a page asks for one, then serves them from
+memory. Edit the logo or `favcon.config.*` and the icons rebuild and the page reloads. Dev
+builds use fast mode, so their bytes differ from a release build.
 
-The options are the config keys minus `out`; they win over `favcon.config.*` in the Vite root.
-`base` follows Vite's `base` when that is a path.
+**`vite build`** writes the release icons to the output directory, next to `index.html`.
+favcon never writes to `public/`.
 
-favcon will not shadow a different file of the same name in `public/`: the build fails, and dev
-serves yours with a warning.
+**The `<head>` tags.** favcon adds its `<link>` tags to `index.html`, unless the page already
+has a `<link rel="icon">`. A framework without an `index.html` can import them instead:
 
-**vite-plugin-pwa.** It writes and links its own manifest, so favcon writes none beside it.
-Give it favcon's icons:
+```js
+import { links, files } from 'virtual:favcon'
+```
+
+**Options.** The plugin takes the same options as `favcon.config.*`, except `out`: Vite decides
+the output directory. Options passed to the plugin win over the config file. `base` defaults
+to Vite's `base`.
+
+**Your files come first.** If `public/` already holds a file favcon would write, such as
+`favicon.ico`, with different bytes, `vite build` stops with an error and `vite dev` serves
+your file with a warning. Delete it to use favcon's.
+
+### With vite-plugin-pwa
+
+vite-plugin-pwa writes its own manifest, so favcon does not write one. Pass favcon's icons
+to it:
 
 ```js
 import { VitePWA } from 'vite-plugin-pwa'
 import favcon, { favconIcons } from 'favcon/vite'
 
 export default defineConfig({
-  plugins: [favcon(), VitePWA({ manifest: { name: 'Example', icons: favconIcons() } })],
+  plugins: [
+    favcon(),
+    VitePWA({ manifest: { name: 'Example', icons: favconIcons() } }),
+  ],
 })
 ```
 
-`favconIcons()` takes the same `sizes`, `bg` and `base` as the plugin. Leave vite-plugin-pwa's
-`pwaAssets` off: it writes a `favicon.ico` and touch icons of its own, and favcon warns when
-both are on.
+Give `favconIcons()` the same `sizes`, `bg` and `base` as the plugin. Turn off
+vite-plugin-pwa's `pwaAssets` option: it writes a `favicon.ico` of its own, and favcon warns
+when both are on.
 
 ## Astro
 
@@ -300,8 +317,8 @@ export default defineConfig({
 })
 ```
 
-That is all of it. The files land in `public/`, the `<link>` tags are spliced into every page
-that does not already declare an icon, and `config.base` is prefixed for you.
+That is all of it. The files land in `public/`, the `<link>` tags go into every page that
+does not already have a `<link rel="icon">`, and `config.base` is prefixed for you.
 
 Options mirror the CLI, except that `sizes` is a real array and `vars` is an object: that is
 what the flags *mean*; the string forms exist only because argv is strings. `manifest` also
@@ -334,8 +351,8 @@ are not the production bytes, by design.
 **Head tags.** Astro has no official head-injection hook. All four `injectScript` stages are
 JavaScript, and a `<link rel="icon">` written by a script is found after the browser has
 already asked for `/favicon.ico`. So `head: 'inject'` (the default) is an `order: 'post'`
-middleware that splices before `</head>` and skips any page that already contains
-`rel="icon"`. `head: 'component'` gives you `favcon/astro/Head.astro` to place yourself, and
+middleware that splices before `</head>` and skips any page that already has a
+`<link rel="icon">`. `head: 'component'` gives you `favcon/astro/Head.astro` to place yourself, and
 `head: false` logs the block for pasting.
 
 favcon **will not overwrite a `public/favicon.ico` it did not write itself.** Clobbering a

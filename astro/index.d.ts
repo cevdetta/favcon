@@ -32,7 +32,7 @@ export interface FavconOptions {
   dev?: 'fast' | 'skip' | 'full';
   /**
    * `'inject'` (default) splices the tags before `</head>`, skipping any page that already
-   * declares an icon. `'component'` leaves it to `favcon/astro/Head.astro`. `false` logs the
+   * has a `<link rel="icon">`. `'component'` leaves it to `favcon/astro/Head.astro`. `false` logs the
    * block for you to paste.
    */
   head?: 'inject' | 'component' | false;
