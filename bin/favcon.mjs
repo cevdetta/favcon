@@ -135,15 +135,12 @@ const normalise = (options) => {
 // =================================================================== build() ==
 
 /**
- * Build the set. Throws FavconError with a finished message; never exits, never writes to
- * stdout. Returns { files, bytes, animated, fit, links }, where `fit` is
- * { apple, icons: { [size]: fit } } (how the mark was placed in each masked icon), and
- * `icons[s]` is null under --bg none, when that size is transparent and unpadded.
+ * The set in memory: validated like build(), nothing written. The Vite plugin serves and
+ * emits these bytes; build() writes them.
  */
-export async function build(options = {}) {
+export async function buildFiles(options = {}) {
   const o = normalise(options);
   const warn = options.onWarn ?? (() => {});
-
   let source;
   try { source = readFileSync(o.input, 'utf8'); } catch (e) {
     throw new FavconError(`cannot read ${o.input}: ${e.message}`);
@@ -151,13 +148,28 @@ export async function build(options = {}) {
   if (!/<svg[\s>]/i.test(source)) {
     throw new FavconError(`not an SVG (no <svg> element found): ${basename(o.input)}`);
   }
+  try {
+    const engine = await loadEngine();
+    return await buildSet(source, o, { engine, optimiseSvg, name: basename(o.input), warn });
+  } catch (e) {
+    if (e instanceof FavconError) throw e;
+    throw new FavconError(e.message);
+  }
+}
+
+/**
+ * Build the set. Throws FavconError with a finished message; never exits, never writes to
+ * stdout. Returns { files, bytes, animated, fit, links }, where `fit` is
+ * { apple, icons: { [size]: fit } } (how the mark was placed in each masked icon), and
+ * `icons[s]` is null under --bg none, when that size is transparent and unpadded.
+ */
+export async function build(options = {}) {
+  const o = normalise(options);
+  const set = await buildFiles(options);
 
   registerSweep();
   let stage = null;
   try {
-    const engine = await loadEngine();
-    const set = await buildSet(source, o, { engine, optimiseSvg, name: basename(o.input), warn });
-
     // The set exists in memory, so it is now safe to touch the output directory: a run that
     // fails on an unresolvable var() or a bad --bg leaves nothing behind.
     try { mkdirSync(o.out, { recursive: true }); } catch (e) {

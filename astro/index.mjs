@@ -10,7 +10,8 @@
 //   * astro:config:setup must not build. It runs on every dev-server restart, and a 20-30 s
 //     stall there is not a tool, it is a hostage situation. It only resolves paths, watches
 //     the input and registers the middleware.
-//   * Not re-running the build is a CONTENT-ADDRESSED CACHE, not a heuristic. See cacheKey.
+//   * Not re-running the build is a CONTENT-ADDRESSED CACHE, not a heuristic. See cacheKey
+//     in vite/cache.mjs, which every host shares.
 
 import { createHash } from 'node:crypto';
 import { copyFile, link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -19,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build, engineVersions, FavconError, linkTags } from '../bin/favcon.mjs';
+import { cacheKey, favconVersion } from '../vite/cache.mjs';
 
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
@@ -26,38 +28,6 @@ const exists = async (p) => { try { await stat(p); return true; } catch { return
 
 /** `/` and `/blog/` both come out as a prefix ending in a single slash. */
 const basePrefix = (base) => (base && base !== '/' ? `/${base.replace(/^\/+|\/+$/g, '')}/` : '/');
-
-/**
- * The cache key, and the reason the cache is safe to trust.
- *
- * favcon's own version, the input bytes, the canonicalised options, and the versions of
- * @napi-rs/image and @gfx/zopfli, because both change output bytes across releases, so a
- * cache keyed only on the SVG hands back stale files after an upgrade.
- */
-const cacheKey = async ({ version, source, options, engine }) => sha256(JSON.stringify({
-  version,
-  source: sha256(source),
-  engine,
-  // Shape is canonicalised (sizes sorted, var names stripped of their leading dashes), but
-  // DEFAULTS ARE NOT SUBSTITUTED. Writing favcon's defaults out here would mean two copies
-  // of every default, and a cache that kept serving the old bytes, unnoticed, if one of them
-  // changed. `version` already covers that: a changed default is a minor release at least.
-  // The cost is a cache miss when someone passes a value that happens to be the default.
-  // Every build option is in the key: one missing field is a stale cache after an upgrade.
-  options: {
-    colors: options.colors ?? null,
-    sizes: options.sizes ? [...options.sizes].map(Number).sort((a, b) => a - b) : null,
-    bg: options.bg === undefined ? null : options.bg,
-    padding: options.padding ?? null,
-    vars: Object.fromEntries(Object.entries(options.vars ?? {})
-      .map(([k, v]) => [k.replace(/^--/, ''), String(v)]).sort()),
-    animation: options.animation !== false,
-    manifest: options.manifest ?? false,
-    mode: options.mode ?? 'release',
-    // The manifest's bytes depend on it, so a changed base must not hit an old slot.
-    base: options.base ?? '/',
-  },
-}));
 
 /**
  * Copy a finished set into public/, refusing to clobber anything the integration did not
@@ -131,10 +101,7 @@ export default function favcon(options = {}) {
       ? { ...buildOptions, base: state.base, sizes: [256], mode: 'fast' }
       : { ...buildOptions, base: state.base };
 
-    const key = await cacheKey({
-      version: JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version,
-      source, options: opts, engine: engineVersions(),
-    });
+    const key = cacheKey({ version: favconVersion(), source, options: opts, engine: engineVersions() });
     const slot = join(state.cacheDir, key);
     const stampPath = join(state.cacheDir, 'written.json');
 
