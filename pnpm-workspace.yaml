@@ -6,12 +6,7 @@ packages:
 # pnpm blocks dependency lifecycle scripts until each one is decided here. `false` is a
 # recorded "no", not an oversight: pnpm otherwise fails the install asking to be told.
 #
-#   esbuild: no. Pulled in under Astro, under site/. Its platform binary arrives as an
-#   optional dependency; the postinstall only re-validates it, and `pnpm --filter
-#   favcon-site build` produces the full site without it.
-#
 #   sharp: no. Astro's image service; the site has no <Image> and no raster assets to
 #   transform, and its icons are built by favcon itself.
 allowBuilds:
-  esbuild: false
   sharp: false
